@@ -26,6 +26,13 @@ Parameters:
     AllowedValues:
     - dev
     - prod
+  SchemaVersion:
+    Type: String
+    Default: '1'
+    Description: 'Bump this on any deploy where you want the schema migration to re-run
+      (it''s idempotent, so re-running is always safe).
+
+      '
 Globals:
   Function:
     Runtime: nodejs24.x
@@ -47,6 +54,15 @@ Globals:
           Ref: FromEmail
         TOKEN_TTL_HOURS:
           Ref: TokenTtlHours
+        DB_CLUSTER_ARN:
+          Fn::GetAtt:
+          - DbCluster
+          - DBClusterArn
+        DB_SECRET_ARN:
+          Fn::GetAtt:
+          - DbCluster
+          - MasterUserSecret.SecretArn
+        DB_NAME: tower5
 Conditions:
   HasAppBaseUrl:
     Fn::Not:
@@ -101,6 +117,107 @@ Resources:
         KeyType: HASH
       - AttributeName: submittedAt
         KeyType: RANGE
+  DbVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  DbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: DbVpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+  DbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: DbVpc
+      CidrBlock: 10.42.2.0/24
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Tower5 Aurora subnet group
+      SubnetIds:
+      - Ref: DbSubnetA
+      - Ref: DbSubnetB
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Tower5 Aurora SG - no ingress (access is via the Data API)
+      VpcId:
+        Ref: DbVpc
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: '16.6'
+      DatabaseName: tower5
+      MasterUsername: tower5_admin
+      ManageMasterUserPassword: true
+      EnableHttpEndpoint: true
+      StorageEncrypted: true
+      DeletionProtection: false
+      DBSubnetGroupName:
+        Ref: DbSubnetGroup
+      VpcSecurityGroupIds:
+      - Ref: DbSecurityGroup
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 2
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier:
+        Ref: DbCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+  MigrateFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: migrate/handler.handler
+      CodeUri: MigrateFn
+      Timeout: 300
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - rds-data:ExecuteStatement
+          - rds-data:BatchExecuteStatement
+          - rds-data:BeginTransaction
+          - rds-data:CommitTransaction
+          - rds-data:RollbackTransaction
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - DBClusterArn
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - MasterUserSecret.SecretArn
+    Metadata:
+      SamResourceId: MigrateFn
+  SchemaMigration:
+    Type: Custom::SchemaMigration
+    DependsOn: DbInstance
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+        - MigrateFn
+        - Arn
+      SchemaVersion:
+        Ref: SchemaVersion
   Api:
     Type: AWS::Serverless::Api
     Properties:
@@ -132,6 +249,24 @@ Resources:
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResponsesTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - rds-data:ExecuteStatement
+          - rds-data:BatchExecuteStatement
+          - rds-data:BeginTransaction
+          - rds-data:CommitTransaction
+          - rds-data:RollbackTransaction
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - DBClusterArn
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - MasterUserSecret.SecretArn
       Events:
         GetForm:
           Type: Api
@@ -182,6 +317,23 @@ Resources:
           Action:
           - sns:Publish
           Resource: '*'
+        - Effect: Allow
+          Action:
+          - rds-data:ExecuteStatement
+          - rds-data:BatchExecuteStatement
+          - rds-data:BeginTransaction
+          - rds-data:CommitTransaction
+          - rds-data:RollbackTransaction
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - DBClusterArn
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - MasterUserSecret.SecretArn
       CodeUri: AdminFn
       Events:
         Members:
@@ -262,6 +414,23 @@ Resources:
           Action:
           - sns:Publish
           Resource: '*'
+        - Effect: Allow
+          Action:
+          - rds-data:ExecuteStatement
+          - rds-data:BatchExecuteStatement
+          - rds-data:BeginTransaction
+          - rds-data:CommitTransaction
+          - rds-data:RollbackTransaction
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - DBClusterArn
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - MasterUserSecret.SecretArn
       Events:
         EndOfDay:
           Type: Schedule
@@ -361,3 +530,19 @@ Outputs:
       to get the admin key.
     Value:
       Ref: ApiApiKey
+  DbClusterArn:
+    Description: Aurora cluster ARN. Pass as --resource-arn to `aws rds-data execute-statement`.
+    Value:
+      Fn::GetAtt:
+      - DbCluster
+      - DBClusterArn
+  DbSecretArn:
+    Description: Secrets Manager ARN holding the DB credentials. Pass as --secret-arn
+      to the Data API.
+    Value:
+      Fn::GetAtt:
+      - DbCluster
+      - MasterUserSecret.SecretArn
+  DbName:
+    Description: Database name inside the cluster.
+    Value: tower5

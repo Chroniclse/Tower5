@@ -18,8 +18,49 @@ Employee submits ───────────────────POST /
 Admin ─GET /admin/export─► AdminFn ─► flatten ResponsesTable → one CSV row per activity
 ```
 
-**Tables:** `Members`, `Config` (single item: dropdowns + role overrides + examples),
-`Tokens` (TTL auto-expiry), `Responses` (PK=memberId, SK=submittedAt).
+**DynamoDB tables (current MVP):** `Members`, `Config` (single item: dropdowns +
+role overrides + examples), `Tokens` (TTL auto-expiry), `Responses`
+(PK=memberId, SK=submittedAt).
+
+## Relational database (Aurora Serverless v2 PostgreSQL)
+
+The richer multi-tenant model ([db/schema.sql](db/schema.sql)) lives in an
+**Aurora Serverless v2 PostgreSQL** cluster provisioned by this stack. The
+Lambdas reach it over the **RDS Data API** (HTTPS) — so no VPC wiring, no DB
+driver, and no connection pooling. Credentials are auto-generated into Secrets
+Manager (`ManageMasterUserPassword`); nothing is stored in env vars except ARNs.
+
+**How the schema gets applied:** on `sam deploy`, the `MigrateFn` Lambda runs
+[db/schema.sql](db/schema.sql) against the cluster via a CloudFormation custom
+resource (`SchemaMigration`). The schema is idempotent, so it's safe to re-run.
+
+- Edit the schema → re-sync the Lambda's copy and deploy with `make deploy`
+  (the Makefile copies `db/schema.sql` → `src/migrate/schema.sql`, since SAM only
+  packages files under `src/`).
+- Force a re-migration without other changes: deploy with a bumped
+  `SchemaVersion`, e.g. `sam deploy --parameter-overrides SchemaVersion=2`,
+  or run `make migrate` to invoke `MigrateFn` directly.
+
+**Querying it by hand** with the Data API (no psql needed) — uses the
+`DbClusterArn`/`DbSecretArn` stack outputs:
+
+```bash
+aws rds-data execute-statement \
+  --resource-arn "$(aws cloudformation describe-stacks --stack-name nett \
+     --query "Stacks[0].Outputs[?OutputKey=='DbClusterArn'].OutputValue" --output text)" \
+  --secret-arn   "$(aws cloudformation describe-stacks --stack-name nett \
+     --query "Stacks[0].Outputs[?OutputKey=='DbSecretArn'].OutputValue" --output text)" \
+  --database tower5 \
+  --sql "select table_name from information_schema.tables where table_schema='public' order by 1"
+```
+
+> **Engine version:** the template pins `aurora-postgresql 16.6`. If a deploy
+> fails with an unavailable-version error, list valid ones and update
+> `DbCluster.EngineVersion`:
+> ```bash
+> aws rds describe-db-engine-versions --engine aurora-postgresql \
+>   --query 'DBEngineVersions[?contains(SupportedFeatureNames, `dataApi`)].EngineVersion'
+> ```
 
 ## Prerequisites (one-time, on your machine)
 
@@ -51,7 +92,7 @@ aws sts get-caller-identity   # should print your account — confirms creds wor
 
 ```bash
 cd backend
-sam build
+sam build                    # or `make build` to also sync the schema copy
 sam deploy --guided          # first time — answer the prompts:
 #   Stack Name:        nett
 #   Region:            us-west-2   (use a Pacific-friendly region)

@@ -26,6 +26,12 @@ Parameters:
     Type: String
     Default: prod
     AllowedValues: [dev, prod]
+  SchemaVersion:
+    Type: String
+    Default: "1"
+    Description: >
+      Bump this on any deploy where you want the schema migration to re-run
+      (it's idempotent, so re-running is always safe).
 
 Globals:
   Function:
@@ -41,6 +47,10 @@ Globals:
         RESPONSES_TABLE: !Ref ResponsesTable
         FROM_EMAIL: !Ref FromEmail
         TOKEN_TTL_HOURS: !Ref TokenTtlHours
+        # Aurora (PostgreSQL) — accessed via the RDS Data API.
+        DB_CLUSTER_ARN: !GetAtt DbCluster.DBClusterArn
+        DB_SECRET_ARN: !GetAtt DbCluster.MasterUserSecret.SecretArn
+        DB_NAME: tower5
 
 # AppBaseUrl override vs. the stack's own CloudFront domain.
 Conditions:
@@ -93,6 +103,100 @@ Resources:
         - { AttributeName: memberId, KeyType: HASH }
         - { AttributeName: submittedAt, KeyType: RANGE }
 
+  # ── Aurora Serverless v2 (PostgreSQL) ────────────────────────────────────
+  # The relational store (db/schema.sql). Reached over the RDS Data API (HTTPS),
+  # so the Lambdas do NOT need to live in the VPC. The cluster still requires a
+  # VPC + subnet group, but nothing connects to it on the network path, so the
+  # security group has no ingress rules. Credentials are auto-generated and held
+  # in Secrets Manager (ManageMasterUserPassword).
+
+  DbVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  DbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DbVpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+
+  DbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DbVpc
+      CidrBlock: 10.42.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Tower5 Aurora subnet group
+      SubnetIds: [!Ref DbSubnetA, !Ref DbSubnetB]
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Tower5 Aurora SG - no ingress (access is via the Data API)
+      VpcId: !Ref DbVpc
+
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: "16.6"            # see README if this version isn't available in your region
+      DatabaseName: tower5
+      MasterUsername: tower5_admin
+      ManageMasterUserPassword: true   # creates + stores the password in Secrets Manager
+      EnableHttpEndpoint: true         # turns on the RDS Data API
+      StorageEncrypted: true
+      DeletionProtection: false        # set true for production
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VpcSecurityGroupIds: [!Ref DbSecurityGroup]
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5               # stays warm (no resume latency); set 0 to allow scale-to-zero
+        MaxCapacity: 2
+
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: db.serverless   # required class for Serverless v2
+      Engine: aurora-postgresql
+
+  # ── Schema migration: applies db/schema.sql on deploy ────────────────────
+  MigrateFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: migrate/handler.handler
+      CodeUri: src/
+      Timeout: 300
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+                - rds-data:BeginTransaction
+                - rds-data:CommitTransaction
+                - rds-data:RollbackTransaction
+              Resource: !GetAtt DbCluster.DBClusterArn
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !GetAtt DbCluster.MasterUserSecret.SecretArn
+
+  # Custom resource that invokes MigrateFn during the stack create/update.
+  # Re-runs whenever SchemaVersion changes (the migration is idempotent).
+  SchemaMigration:
+    Type: Custom::SchemaMigration
+    DependsOn: DbInstance
+    Properties:
+      ServiceToken: !GetAtt MigrateFn.Arn
+      SchemaVersion: !Ref SchemaVersion
+
   # ── HTTP API ─────────────────────────────────────────────────────────────
   Api:
     Type: AWS::Serverless::Api
@@ -118,6 +222,18 @@ Resources:
         - DynamoDBReadPolicy: { TableName: !Ref ConfigTable }
         - DynamoDBCrudPolicy: { TableName: !Ref TokensTable }
         - DynamoDBCrudPolicy: { TableName: !Ref ResponsesTable }
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+                - rds-data:BeginTransaction
+                - rds-data:CommitTransaction
+                - rds-data:RollbackTransaction
+              Resource: !GetAtt DbCluster.DBClusterArn
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !GetAtt DbCluster.MasterUserSecret.SecretArn
       Events:
         GetForm:
           Type: Api
@@ -146,6 +262,17 @@ Resources:
             - Effect: Allow
               Action: [sns:Publish]
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+                - rds-data:BeginTransaction
+                - rds-data:CommitTransaction
+                - rds-data:RollbackTransaction
+              Resource: !GetAtt DbCluster.DBClusterArn
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !GetAtt DbCluster.MasterUserSecret.SecretArn
       CodeUri: src/
       Events:
         Members:
@@ -184,6 +311,17 @@ Resources:
             - Effect: Allow
               Action: [sns:Publish]
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+                - rds-data:BeginTransaction
+                - rds-data:CommitTransaction
+                - rds-data:RollbackTransaction
+              Resource: !GetAtt DbCluster.DBClusterArn
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !GetAtt DbCluster.MasterUserSecret.SecretArn
       Events:
         EndOfDay:        # 4:00 PM Pacific (23:00 UTC during PDT) — full team reminder
           Type: Schedule
@@ -268,3 +406,12 @@ Outputs:
   ApiKeyId:
     Description: Run `aws apigateway get-api-key --api-key <this id> --include-value` to get the admin key.
     Value: !Ref ApiApiKey   # auto-created by the UsagePlan above
+  DbClusterArn:
+    Description: Aurora cluster ARN. Pass as --resource-arn to `aws rds-data execute-statement`.
+    Value: !GetAtt DbCluster.DBClusterArn
+  DbSecretArn:
+    Description: Secrets Manager ARN holding the DB credentials. Pass as --secret-arn to the Data API.
+    Value: !GetAtt DbCluster.MasterUserSecret.SecretArn
+  DbName:
+    Description: Database name inside the cluster.
+    Value: tower5

@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "nett"
+resolve_s3 = true
+s3_prefix = "nett"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "FromEmail=\"bdenis1420@gmail.com\" AppBaseUrl=\"\" TokenTtlHours=\"36\" Stage=\"prod\" SchemaVersion=\"1\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-2"
