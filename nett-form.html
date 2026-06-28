@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NETT — Activity Report</title>
+<style>
+  :root {
+    --red: #c0392b;
+    --red-dark: #922b21;
+    --red-hover: #a93226;
+    --red-muted: rgba(192,57,43,0.08);
+    --black: #1a1a1a;
+    --text: #1a1a1a;
+    --text-mid: #444;
+    --text-muted: #777;
+    --text-light: #aaa;
+    --border: #ddd;
+    --border-dark: #bbb;
+    --surface: #fff;
+    --surface2: #f7f7f7;
+    --surface3: #f0f0f0;
+    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  /* ── HEADER ── */
+  .site-header {
+    background: var(--red);
+    padding: 0 0 0 32px;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    min-height: 68px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 0;
+  }
+  .logo {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .logo-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.35); }
+  .header-text h1 {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #fff;
+  }
+  .header-text p {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 2px;
+    font-style: italic;
+  }
+  .header-right {
+    background: var(--red-dark);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 28px;
+    min-width: 120px;
+    text-align: center;
+  }
+  .header-right .member-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.04em;
+  }
+  .header-right .member-role {
+    font-size: 10px;
+    color: rgba(255,255,255,0.65);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 3px;
+  }
+
+  /* ── INSTRUCTIONS BANNER ── */
+  .instructions {
+    background: var(--surface);
+    border-bottom: 2px solid var(--red);
+    padding: 14px 32px;
+  }
+  .instructions-inner {
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .instructions strong {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--red);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .instructions ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+    padding-left: 18px;
+  }
+  .instructions li {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── MAIN CONTAINER ── */
+  .container {
+    max-width: 860px;
+    margin: 28px auto;
+    padding: 0 16px;
+  }
+
+  /* ── ACTIVITY CARD ── */
+  .activity-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+  .activity-card-header {
+    background: var(--surface3);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .activity-number {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .remove-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: var(--text-light);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 2px;
+    transition: color 0.15s;
+  }
+  .remove-btn:hover { color: var(--red); }
+
+  .activity-card-body { padding: 20px; }
+
+  /* ── DROPDOWN ROW ── */
+  .dropdown-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* ── FORM FIELDS ── */
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    margin-bottom: 5px;
+  }
+  .field { margin-bottom: 0; }
+
+  select, input[type="url"], textarea {
+    background: #fff;
+    border: 1px solid var(--border-dark);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  select:focus, input[type="url"]:focus, textarea:focus {
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px rgba(192,57,43,0.1);
+  }
+  select option { background: #fff; }
+
+  /* ── ACTIVITY TEXTAREA ── */
+  .activity-field { margin-bottom: 12px; }
+  .activity-textarea {
+    resize: vertical;
+    min-height: 160px;
+    line-height: 1.6;
+    font-size: 13px;
+  }
+  .activity-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .activity-hint span {
+    display: inline-block;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 7px;
+    margin: 2px 2px 2px 0;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+  }
+
+  /* ── LINK FIELD ── */
+  .link-field { display: flex; gap: 8px; align-items: flex-end; }
+  .link-field input { flex: 1; }
+  .link-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+
+  /* ── EXAMPLE BLOCK ── */
+  .example-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--red);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-bottom: 12px;
+    font-family: var(--font);
+  }
+  .example-toggle:hover { color: var(--red-dark); }
+  .example-block {
+    background: #fdf5f5;
+    border: 1px solid rgba(192,57,43,0.2);
+    border-left: 3px solid var(--red);
+    border-radius: 3px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: var(--text-mid);
+    line-height: 1.7;
+    display: none;
+  }
+  .example-block.visible { display: block; }
+  .example-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 6px;
+  }
+
+  /* ── ADD BUTTON ── */
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 2px dashed var(--border-dark);
+    border-radius: 4px;
+    padding: 12px 20px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 100%;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .add-btn:hover {
+    border-color: var(--red);
+    color: var(--red);
+    background: var(--red-muted);
+  }
+  .add-icon {
+    font-size: 20px;
+    font-weight: 300;
+    line-height: 1;
+  }
+
+  /* ── SUBMIT SECTION ── */
+  .submit-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--red);
+    border-radius: 4px;
+    padding: 22px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .submit-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    flex: 1;
+  }
+  .submit-btn {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 13px 32px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .submit-btn:hover { background: var(--red-hover); }
+  .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* ── SUCCESS STATE ── */
+  .success-screen {
+    display: none;
+    text-align: center;
+    padding: 60px 20px;
+  }
+  .success-screen.visible { display: block; }
+  .success-icon {
+    width: 64px;
+    height: 64px;
+    background: var(--red);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 28px;
+    color: #fff;
+  }
+  .success-screen h2 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .success-screen p { font-size: 13px; color: var(--text-muted); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--black);
+    border-left: 3px solid var(--red);
+    border-radius: 3px;
+    padding: 12px 20px; font-size: 13px; color: #f0f0f0;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .site-header { padding-left: 16px; }
+    .container { padding: 0 12px; margin: 16px auto; }
+    .dropdown-row { grid-template-columns: 1fr; }
+    .instructions { padding: 12px 16px; }
+    .submit-section { flex-direction: column; align-items: stretch; }
+    .submit-btn { text-align: center; }
+    .header-right { padding: 0 16px; min-width: 90px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="site-header">
+  <div class="header-left">
+    <div class="logo">TOWER5</div>
+    <div class="logo-divider"></div>
+    <div class="header-text">
+      <h1>NETT — Daily Activity Report</h1>
+      <p id="header-date">Loading…</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="member-name" id="member-name">Marcus Webb</div>
+    <div class="member-role" id="member-role">Director</div>
+  </div>
+</div>
+
+<!-- INSTRUCTIONS -->
+<div class="instructions">
+  <div class="instructions-inner">
+    <strong>How to fill out this form</strong>
+    <ol>
+      <li>Select the Phase, Track and Priority Juncture for each activity.</li>
+      <li>Describe your activity in detail — hit each of the prompts below.</li>
+      <li>Paste any relevant document or website links.</li>
+      <li>Use the <strong>+ Add activity</strong> button to log multiple entries.</li>
+      <li>Hit <strong>Submit</strong> when done — takes about 2–5 minutes.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- MAIN FORM -->
+<div class="container">
+  <div id="form-area">
+    <div id="activities-container"></div>
+
+    <!-- ADD BUTTON -->
+    <button class="add-btn" onclick="addActivity()">
+      <span class="add-icon">+</span> Add another activity
+    </button>
+
+    <!-- SUBMIT -->
+    <div class="submit-section">
+      <div class="submit-note">
+        Your responses are saved securely. You'll receive a confirmation once submitted.<br>
+        If you have nothing new to report today, you can note "No change since last submission."
+      </div>
+      <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit report</button>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✓</div>
+    <h2>Report submitted</h2>
+    <p>Thanks, <span id="success-name"></span>. Your activity report has been recorded.<br>See you tomorrow.</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────
+// Set API_BASE to your deployed API (from the SAM `ApiBaseUrl` output) to go live.
+// Leave it '' to run the form standalone with mock data (preview mode).
+const API_BASE = '';
+
+// The magic-link token comes from the URL: nett-form.html?t=XXXX
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+
+// These start as mock fallbacks; in live mode they're overwritten by GET /form.
+let USER = { name: 'Marcus Webb', role: 'Director', token: TOKEN || 'preview' };
+
+let OPTIONS = {
+  phase: ['Development', 'Pre-Production', 'Principal Photography', 'Post-Production', 'Distribution'],
+  track: ['Creative', 'Technical / Production', 'Legal', 'Compliance', 'Knowledge Management'],
+  priority: ['Volumetric Data', 'Performance Capture', 'Visual Consistency', 'Asynchronous Assembly', 'AI Integration'],
+};
+
+// Single example string for the member's role (live mode sets this from the API).
+let EXAMPLE_TEXT = 'Testing gen AI tools for video rendering, applying standard criteria. Main tools tested are Seedance, Veo, Kling, WAN and Minimax. Working with Tom and Roberto. Discovered major differences in the degree of control, ease of use and fidelity.';
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let activityCount = 0;
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+init();
+
+async function init() {
+  document.getElementById('header-date').textContent =
+    new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Live mode: pull this member's config from the magic link.
+  if (API_BASE && TOKEN) {
+    try {
+      const res = await fetch(`${API_BASE}/form?t=${encodeURIComponent(TOKEN)}`);
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        return showFatal(error || 'This link is invalid, already used, or expired.');
+      }
+      const data = await res.json();
+      USER = { name: data.member.name, role: data.member.role, token: TOKEN };
+      OPTIONS = data.options;
+      EXAMPLE_TEXT = data.example || EXAMPLE_TEXT;
+    } catch (e) {
+      return showFatal('Could not load your form. Please check your connection and retry.');
+    }
+  }
+
+  document.getElementById('member-name').textContent = USER.name;
+  document.getElementById('member-role').textContent = USER.role;
+  document.getElementById('success-name').textContent = USER.name.split(' ')[0];
+  addActivity(); // Start with one row
+}
+
+function showFatal(msg) {
+  document.getElementById('form-area').innerHTML =
+    `<div style="background:#fff;border:1px solid var(--border);border-top:3px solid var(--red);border-radius:4px;padding:40px;text-align:center">
+       <h2 style="font-size:18px;margin-bottom:8px">Link unavailable</h2>
+       <p style="color:var(--text-muted);font-size:13px">${msg}</p>
+     </div>`;
+}
+
+// ── BUILD SELECT ───────────────────────────────────────────────────────────
+function buildSelect(key, id, placeholder) {
+  const opts = OPTIONS[key].map(v => `<option value="${v}">${v}</option>`).join('');
+  return `
+    <div class="field">
+      <label>${placeholder}</label>
+      <select id="${id}" onchange="updateExampleVisibility(${id.match(/\d+/)[0]})">
+        <option value="">— Select —</option>
+        ${opts}
+      </select>
+    </div>
+  `;
+}
+
+// ── ADD ACTIVITY ───────────────────────────────────────────────────────────
+function addActivity() {
+  activityCount++;
+  const n = activityCount;
+  const exampleText = EXAMPLE_TEXT;
+  const isFirst = n === 1;
+
+  const card = document.createElement('div');
+  card.className = 'activity-card';
+  card.id = `activity-${n}`;
+  card.innerHTML = `
+    <div class="activity-card-header">
+      <span class="activity-number">Activity ${n}</span>
+      ${!isFirst ? `<button class="remove-btn" onclick="removeActivity(${n})" title="Remove this activity">×</button>` : ''}
+    </div>
+    <div class="activity-card-body">
+
+      <!-- DROPDOWNS -->
+      <div class="dropdown-row">
+        ${buildSelect('phase', `phase-${n}`, 'Phase')}
+        ${buildSelect('track', `track-${n}`, 'Track')}
+        ${buildSelect('priority', `priority-${n}`, 'Priority juncture')}
+      </div>
+
+      <!-- EXAMPLE TOGGLE -->
+      <button class="example-toggle" onclick="toggleExample(${n})">
+        <span id="example-arrow-${n}">▶</span> See example for your role
+      </button>
+      <div class="example-block" id="example-${n}">
+        <div class="example-label">Example — ${USER.role}</div>
+        ${exampleText}
+      </div>
+
+      <!-- ACTIVITY TEXTAREA -->
+      <div class="activity-field">
+        <label>Activity description</label>
+        <textarea
+          class="activity-textarea"
+          id="activity-text-${n}"
+          placeholder="Describe what you worked on today…"
+        ></textarea>
+        <div class="activity-hint">
+          Try to address:
+          <span>What</span>
+          <span>Purpose</span>
+          <span>Who</span>
+          <span>Approach</span>
+          <span>Tools used</span>
+          <span>Challenges</span>
+          <span>Insights</span>
+        </div>
+      </div>
+
+      <!-- LINK FIELD -->
+      <div>
+        <label>Link to document or website (optional)</label>
+        <input
+          type="url"
+          id="link-${n}"
+          placeholder="https://…"
+        >
+        <div class="link-hint">Paste a Google Drive link, reference doc, tool URL, etc.</div>
+      </div>
+
+    </div>
+  `;
+
+  document.getElementById('activities-container').appendChild(card);
+  if (n > 1) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  renumberCards();
+}
+
+// ── REMOVE ACTIVITY ────────────────────────────────────────────────────────
+function removeActivity(n) {
+  const card = document.getElementById(`activity-${n}`);
+  if (card) card.remove();
+  renumberCards();
+}
+
+function renumberCards() {
+  const cards = document.querySelectorAll('.activity-card');
+  cards.forEach((card, i) => {
+    const numEl = card.querySelector('.activity-number');
+    if (numEl) numEl.textContent = `Activity ${i + 1}`;
+  });
+}
+
+// ── EXAMPLE TOGGLE ─────────────────────────────────────────────────────────
+function toggleExample(n) {
+  const block = document.getElementById(`example-${n}`);
+  const arrow = document.getElementById(`example-arrow-${n}`);
+  if (block) {
+    block.classList.toggle('visible');
+    arrow.textContent = block.classList.contains('visible') ? '▼' : '▶';
+  }
+}
+
+function updateExampleVisibility(n) { /* hook for future per-track examples */ }
+
+// ── SUBMIT ─────────────────────────────────────────────────────────────────
+function submitForm() {
+  const cards = document.querySelectorAll('.activity-card');
+  const activities = [];
+  let hasError = false;
+
+  cards.forEach((card, i) => {
+    const n = card.id.replace('activity-', '');
+    const phase    = document.getElementById(`phase-${n}`)?.value;
+    const track    = document.getElementById(`track-${n}`)?.value;
+    const priority = document.getElementById(`priority-${n}`)?.value;
+    const text     = document.getElementById(`activity-text-${n}`)?.value?.trim();
+    const link     = document.getElementById(`link-${n}`)?.value?.trim();
+
+    if (!text) {
+      showToast(`Please fill in the activity description for Activity ${i + 1}.`);
+      hasError = true;
+      return;
+    }
+    activities.push({ phase, track, priority, text, link });
+  });
+
+  if (hasError || activities.length === 0) return;
+
+  const payload = { token: USER.token, activities };
+  const btn = document.getElementById('submit-btn');
+
+  // Preview mode (no backend): just show the success screen.
+  if (!API_BASE || !TOKEN) {
+    console.log('Submitting (preview):', JSON.stringify(payload, null, 2));
+    showSuccess();
+    return;
+  }
+
+  // Live mode: POST to the API.
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  fetch(`${API_BASE}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || 'Submission failed.');
+      }
+      showSuccess();
+    })
+    .catch((err) => {
+      showToast(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Submit report';
+    });
+}
+
+function showSuccess() {
+  document.getElementById('form-area').style.display = 'none';
+  document.getElementById('success-screen').classList.add('visible');
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

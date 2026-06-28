@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NETT — Admin Panel</title>
+<style>
+  :root {
+    --black: #1a1a1a;
+    --charcoal: #2e2e2e;
+    --mid: #444444;
+    --gray: #6b6b6b;
+    --light: #a8a8a8;
+    --border: #333333;
+    --surface: #242424;
+    --surface2: #2a2a2a;
+    --red: #c0392b;
+    --red-hover: #a93226;
+    --red-muted: rgba(192,57,43,0.12);
+    --white: #f0f0f0;
+    --white-dim: #b0b0b0;
+    --success: #27ae60;
+    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 56px;
+    background: var(--black);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--white);
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--red); }
+  .nav-tabs {
+    display: flex;
+    gap: 0;
+    height: 100%;
+  }
+  .nav-tab {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gray);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .nav-tab:hover { color: var(--white-dim); }
+  .nav-tab.active { color: var(--white); border-bottom-color: var(--red); }
+  .nav-right {
+    font-size: 12px;
+    color: var(--gray);
+    letter-spacing: 0.05em;
+  }
+
+  /* LAYOUT */
+  .page { display: none; flex: 1; }
+  .page.active { display: flex; flex-direction: column; }
+
+  .page-header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--white);
+  }
+  .page-header p {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--gray);
+  }
+
+  .page-body {
+    padding: 28px 32px;
+    flex: 1;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--white-dim);
+  }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .btn-primary { background: var(--red); color: #fff; }
+  .btn-primary:hover { background: var(--red-hover); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--gray);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { color: var(--white); border-color: var(--mid); }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+  .btn-danger:hover { background: var(--red-muted); }
+
+  /* INPUTS */
+  input[type="text"], input[type="email"], select, textarea {
+    background: var(--charcoal);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--white);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  input[type="text"]:focus,
+  input[type="email"]:focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--red);
+  }
+  select option { background: var(--charcoal); }
+  textarea { resize: vertical; min-height: 80px; }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--light);
+    margin-bottom: 6px;
+  }
+  .field { margin-bottom: 16px; }
+  .field-row { display: flex; gap: 12px; }
+  .field-row .field { flex: 1; }
+
+  /* TAGS */
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--white-dim);
+  }
+  .tag-remove {
+    background: none;
+    border: none;
+    color: var(--gray);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.1s;
+  }
+  .tag-remove:hover { color: var(--red); }
+
+  /* TAG INPUT ROW */
+  .tag-input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .tag-input-row input { flex: 1; }
+
+  /* TEAM TABLE */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    color: var(--white-dim);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .role-badge {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--light);
+  }
+  .status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .status-active { background: var(--success); }
+  .status-pending { background: #e67e22; }
+
+  /* DISPATCH */
+  .dispatch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .dispatch-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+  }
+  .dispatch-card h3 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--light);
+    margin-bottom: 12px;
+  }
+  .schedule-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--white-dim);
+  }
+  .schedule-row:last-child { border-bottom: none; }
+  .schedule-time {
+    font-weight: 600;
+    color: var(--white);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+  .schedule-label { color: var(--gray); font-size: 12px; }
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--gray);
+  }
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--mid);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .slider:before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    top: 3px;
+    background: var(--white);
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle input:checked + .slider { background: var(--red); }
+  .toggle input:checked + .slider:before { transform: translateX(14px); }
+
+  .dispatch-history {
+    margin-top: 8px;
+  }
+  .history-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--gray);
+  }
+  .history-row:last-child { border-bottom: none; }
+  .history-date { color: var(--white-dim); }
+  .history-stat { color: var(--light); }
+
+  /* TOAST */
+  #toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    border-radius: 4px;
+    padding: 12px 20px;
+    font-size: 13px;
+    color: var(--white-dim);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* MODAL */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 480px;
+    max-width: 95vw;
+    padding: 28px;
+  }
+  .modal h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: var(--white);
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  /* ROLE SECTIONS */
+  .role-section {
+    margin-bottom: 24px;
+  }
+  .role-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .role-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.04em;
+  }
+  .role-section-chevron {
+    font-size: 11px;
+    color: var(--gray);
+    transition: transform 0.2s;
+  }
+  .role-section.collapsed .role-section-chevron { transform: rotate(-90deg); }
+  .role-section.collapsed .role-section-body { display: none; }
+
+  .empty-state {
+    padding: 32px;
+    text-align: center;
+    color: var(--gray);
+    font-size: 13px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">TOWER<span>5</span> <span style="color:var(--gray);font-weight:400;font-size:13px;letter-spacing:0.04em;margin-left:10px;text-transform:none">NETT Admin</span></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="switchTab('dispatch')">Dispatch</div>
+    <div class="nav-tab" onclick="switchTab('team')">Team</div>
+    <div class="nav-tab" onclick="switchTab('config')">Form Config</div>
+  </div>
+  <div class="nav-right">
+    <span id="conn-status" title="Connection status">Preview mode</span>
+    <button class="btn btn-ghost btn-sm" style="margin-left:12px" onclick="openKeyModal()">Connection</button>
+  </div>
+</nav>
+
+<!-- ===================== DISPATCH PAGE ===================== -->
+<div class="page active" id="page-dispatch">
+  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-direction:row">
+    <div>
+      <h1>Dispatch</h1>
+      <p>Send forms to your team manually or manage the automatic schedule.</p>
+    </div>
+    <button class="btn btn-ghost" onclick="exportCsv()">⬇ Export responses (CSV)</button>
+  </div>
+  <div class="page-body">
+
+    <div class="dispatch-grid">
+
+      <!-- Manual dispatch -->
+      <div class="dispatch-card">
+        <h3>Send now</h3>
+        <div class="field">
+          <label>Recipients</label>
+          <select id="dispatch-target">
+            <option value="all">All team members</option>
+            <option value="nonresponders">Non-responders (today)</option>
+            <option value="Director">Directors only</option>
+            <option value="Editor">Editors only</option>
+            <option value="Producer">Producers only</option>
+            <option value="Legal / Compliance">Legal / Compliance only</option>
+            <option value="VFX / Tech">VFX / Tech only</option>
+            <option value="Knowledge Management">Knowledge Management only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Channel</label>
+          <select id="dispatch-channel">
+            <option value="both">Email + SMS</option>
+            <option value="email">Email only</option>
+            <option value="sms">SMS only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Custom message (optional)</label>
+          <textarea id="dispatch-note" placeholder="Add a note to the top of the reminder, e.g. 'Please focus on tool evaluations this week.'"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="sendDispatch()">Send forms now</button>
+      </div>
+
+      <!-- Schedule -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="dispatch-card">
+          <h3>Automatic schedule</h3>
+          <p style="font-size:11px;color:var(--gray);margin:-4px 0 12px;line-height:1.5">Configured in AWS EventBridge — shown here for reference. Times are Pacific (PDT).</p>
+          <div class="schedule-row">
+            <div>
+              <div class="schedule-time">4:00 PM PT</div>
+              <div class="schedule-label">End-of-day reminder</div>
+            </div>
+            <div class="toggle-wrap">
+              <label class="toggle">
+                <input type="checkbox" checked onchange="toggleSchedule(this,'eod')">
+                <span class="slider"></span>
+              </label>
+              On
+            </div>
+          </div>
+          <div class="schedule-row">
+            <div>
+              <div class="schedule-time">8:30 AM PT</div>
+              <div class="schedule-label">Morning follow-up (non-responders)</div>
+            </div>
+            <div class="toggle-wrap">
+              <label class="toggle">
+                <input type="checkbox" checked onchange="toggleSchedule(this,'morning')">
+                <span class="slider"></span>
+              </label>
+              On
+            </div>
+          </div>
+        </div>
+
+        <div class="dispatch-card">
+          <h3>Recent dispatches</h3>
+          <p style="font-size:11px;color:var(--gray);margin:-4px 0 12px;line-height:1.5">Live send results appear as a toast. A persistent dispatch log isn't stored yet.</p>
+          <div class="dispatch-history">
+            <div class="history-row" style="border:none;color:var(--gray)">No dispatches recorded yet.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TEAM PAGE ===================== -->
+<div class="page" id="page-team">
+  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-direction:row;padding:28px 32px 20px">
+    <div>
+      <h1>Team</h1>
+      <p>Manage who receives forms and their assigned role.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddMember()">+ Add member</button>
+  </div>
+  <div class="page-body">
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table id="team-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="team-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CONFIG PAGE ===================== -->
+<div class="page" id="page-config">
+  <div class="page-header">
+    <h1>Form config</h1>
+    <p>Configure the dropdown options available in each role's form. Changes apply to the next dispatch.</p>
+  </div>
+  <div class="page-body">
+
+    <!-- Global dropdowns -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Global options</span>
+        <span style="font-size:12px;color:var(--gray)">Available to all roles</span>
+      </div>
+
+      <div class="field">
+        <label>Phase options</label>
+        <div id="tags-phase" class="tag-list"></div>
+        <div class="tag-input-row">
+          <input type="text" id="input-phase" placeholder="Add phase…" onkeydown="handleTagKey(event,'phase')">
+          <button class="btn btn-ghost btn-sm" onclick="addTag('phase')">Add</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="field">
+        <label>Track options</label>
+        <div id="tags-track" class="tag-list"></div>
+        <div class="tag-input-row">
+          <input type="text" id="input-track" placeholder="Add track…" onkeydown="handleTagKey(event,'track')">
+          <button class="btn btn-ghost btn-sm" onclick="addTag('track')">Add</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="field">
+        <label>Priority juncture options</label>
+        <div id="tags-priority" class="tag-list"></div>
+        <div class="tag-input-row">
+          <input type="text" id="input-priority" placeholder="Add juncture…" onkeydown="handleTagKey(event,'priority')">
+          <button class="btn btn-ghost btn-sm" onclick="addTag('priority')">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-role overrides -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Role overrides</span>
+        <span style="font-size:12px;color:var(--gray)">Add options visible only to a specific role</span>
+      </div>
+      <div id="role-sections"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ADD MEMBER MODAL -->
+<div class="modal-backdrop" id="modal-add">
+  <div class="modal">
+    <h2>Add team member</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>First name</label>
+        <input type="text" id="new-fname" placeholder="Jane">
+      </div>
+      <div class="field">
+        <label>Last name</label>
+        <input type="text" id="new-lname" placeholder="Smith">
+      </div>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="new-email" placeholder="jane@tower5.com">
+    </div>
+    <div class="field">
+      <label>Phone (for SMS)</label>
+      <input type="text" id="new-phone" placeholder="+1 310 000 0000">
+    </div>
+    <div class="field">
+      <label>Role</label>
+      <select id="new-role">
+        <option value="Director">Director</option>
+        <option value="Editor">Editor</option>
+        <option value="Producer">Producer</option>
+        <option value="VFX / Tech">VFX / Tech</option>
+        <option value="Legal / Compliance">Legal / Compliance</option>
+        <option value="Knowledge Management">Knowledge Management</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="addMember()">Add member</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONNECTION / API KEY MODAL -->
+<div class="modal-backdrop" id="modal-key">
+  <div class="modal">
+    <h2>Admin connection</h2>
+    <div class="field">
+      <label>API base URL</label>
+      <input type="text" id="api-base-input" placeholder="https://xxxx.execute-api.us-west-2.amazonaws.com/prod">
+    </div>
+    <div class="field">
+      <label>Admin API key (x-api-key)</label>
+      <input type="text" id="api-key-input" placeholder="Paste your API key">
+    </div>
+    <p style="font-size:12px;color:var(--gray);line-height:1.6">
+      Both are stored only in this browser. Get them from the SAM deploy outputs:<br>
+      <code style="color:var(--white-dim)">aws apigateway get-api-key --api-key &lt;ApiKeyId&gt; --include-value --query value --output text</code>
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeKeyModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConnection()">Save &amp; connect</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── CONNECTION ───────────────────────────────────────────────────────────────
+// Persisted in this browser. Set via the "Connection" modal, or hard-code API_BASE.
+let API_BASE = localStorage.getItem('nett_api_base') || '';
+let API_KEY  = localStorage.getItem('nett_api_key')  || '';
+const LIVE = () => !!API_BASE;
+
+// Roles the form/config support. Drives the role-override sections.
+const ROLES = ['Director', 'Editor', 'Producer', 'VFX / Tech', 'Legal / Compliance', 'Knowledge Management'];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+// In preview mode (no API_BASE) these mocks render so the panel is explorable.
+const state = {
+  team: [
+    { memberId:'m1', fname:'Marcus',  lname:'Webb',    email:'m.webb@tower5.com',    phone:'+13101110001', role:'Director',             status:'active' },
+    { memberId:'m2', fname:'Priya',   lname:'Nair',    email:'p.nair@tower5.com',    phone:'+13101110002', role:'Editor',               status:'active' },
+    { memberId:'m3', fname:'Carlos',  lname:'Fuentes', email:'c.fuentes@tower5.com', phone:'+13101110003', role:'VFX / Tech',           status:'active' },
+    { memberId:'m4', fname:'Dana',    lname:'Osei',    email:'d.osei@tower5.com',    phone:'+13101110004', role:'Producer',             status:'active' },
+    { memberId:'m5', fname:'Tom',     lname:'Hirsch',  email:'t.hirsch@tower5.com',  phone:'+13101110005', role:'Legal / Compliance',   status:'active' },
+    { memberId:'m6', fname:'Roberto', lname:'Salinas', email:'r.salinas@tower5.com', phone:'+13101110006', role:'VFX / Tech',           status:'pending' },
+  ],
+  tags: {
+    phase:    ['Development','Pre-Production','Principal Photography','Post-Production','Distribution'],
+    track:    ['Creative','Technical / Production','Legal','Compliance','Knowledge Management'],
+    priority: ['Volumetric Data','Performance Capture','Visual Consistency','Asynchronous Assembly','AI Integration'],
+  },
+  roleOverrides: {},   // { 'Director': { track:[], priority:[] }, ... } — ensured per ROLES
+  examples: {},        // preserved from backend config on save
+  localSeq: 100,
+};
+
+// ─── API HELPER ────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API_BASE + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY, ...(opts.headers || {}) },
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+    throw new Error(msg);
+  }
+  return res;
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('page-'+tab).classList.add('active');
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─── CONNECTION MODAL ───────────────────────────────────────────────────────────
+function refreshConnStatus() {
+  const el = document.getElementById('conn-status');
+  if (!LIVE())       { el.textContent = 'Preview mode';  el.style.color = 'var(--gray)'; }
+  else if (!API_KEY) { el.textContent = 'Key required';  el.style.color = '#e67e22'; }
+  else               { el.textContent = '● Connected';   el.style.color = 'var(--success)'; }
+}
+
+function openKeyModal() {
+  document.getElementById('api-base-input').value = API_BASE;
+  document.getElementById('api-key-input').value = API_KEY;
+  document.getElementById('modal-key').classList.add('open');
+}
+function closeKeyModal() { document.getElementById('modal-key').classList.remove('open'); }
+
+async function saveConnection() {
+  API_BASE = document.getElementById('api-base-input').value.trim().replace(/\/$/, '');
+  API_KEY  = document.getElementById('api-key-input').value.trim();
+  localStorage.setItem('nett_api_base', API_BASE);
+  localStorage.setItem('nett_api_key', API_KEY);
+  closeKeyModal();
+  refreshConnStatus();
+  showToast(LIVE() ? 'Connected. Loading live data…' : 'Cleared — back to preview mode.');
+  await loadAll();
+}
+
+// ─── DATA LOADING ────────────────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadTeam(), loadConfig()]);
+}
+
+async function loadTeam() {
+  if (LIVE()) {
+    try {
+      const data = await (await api('/admin/members')).json();
+      state.team = data.members || [];
+    } catch (e) { showToast('Team: ' + e.message); }
+  }
+  renderTeam();
+  updateCounts();
+}
+
+async function loadConfig() {
+  if (LIVE()) {
+    try {
+      const cfg = await (await api('/admin/config')).json();
+      if (cfg.tags) state.tags = cfg.tags;
+      state.roleOverrides = cfg.roleOverrides || {};
+      state.examples = cfg.examples || {};
+    } catch (e) { showToast('Config: ' + e.message); }
+  }
+  ['phase','track','priority'].forEach(renderTags);
+  renderRoleSections();
+}
+
+// PUT the whole config back after any edit (no-op in preview mode).
+async function persistConfig() {
+  if (!LIVE()) return;
+  try {
+    await api('/admin/config', {
+      method: 'PUT',
+      body: JSON.stringify({ tags: state.tags, roleOverrides: state.roleOverrides, examples: state.examples }),
+    });
+  } catch (e) { showToast('Not saved: ' + e.message); }
+}
+
+function updateCounts() {
+  const opt = document.querySelector('#dispatch-target option[value="all"]');
+  if (opt) opt.textContent = `All team members (${state.team.length})`;
+}
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────────
+async function exportCsv() {
+  if (!LIVE()) { showToast('Preview mode — connect to export real responses.'); return; }
+  try {
+    const res = await api('/admin/export');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nett-responses-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported.');
+  } catch (e) { showToast('Export: ' + e.message); }
+}
+
+// ─── DISPATCH ─────────────────────────────────────────────────────────────────
+async function sendDispatch() {
+  const audience = document.getElementById('dispatch-target').value;
+  const channel  = document.getElementById('dispatch-channel').value;
+  const note     = document.getElementById('dispatch-note').value.trim();
+
+  if (!LIVE()) { showToast('Preview mode — connect to send real forms.'); return; }
+
+  const btn = event.target;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Sending…';
+  try {
+    const data = await (await api('/admin/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ audience, channel, note }),
+    })).json();
+    showToast(`Sent to ${data.sent}/${data.recipients} recipient(s)${data.failed ? `, ${data.failed} failed` : ''}.`);
+  } catch (e) {
+    showToast('Dispatch: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// The real schedule lives in EventBridge; these toggles are reference-only.
+function toggleSchedule(cb, which) {
+  cb.checked = true; // can't be changed from here
+  showToast('Schedule is managed in AWS EventBridge — edit template.yaml to change it.');
+}
+
+// ─── TEAM ─────────────────────────────────────────────────────────────────────
+function renderTeam() {
+  const tbody = document.getElementById('team-tbody');
+  if (!state.team.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:28px">No team members yet. Use “+ Add member”.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = state.team.map(m => `
+    <tr>
+      <td style="font-weight:600;color:var(--white)">${m.fname} ${m.lname}</td>
+      <td>${m.email}</td>
+      <td><span class="role-badge">${m.role}</span></td>
+      <td>
+        <span class="status-dot ${m.status === 'active' ? 'status-active' : 'status-pending'}"></span>
+        ${m.status === 'active' ? 'Active' : 'Pending'}
+      </td>
+      <td style="text-align:right">
+        <button class="btn btn-danger btn-sm" onclick="removeMember('${m.memberId}')">Remove</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openAddMember() {
+  document.getElementById('modal-add').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-add').classList.remove('open');
+  ['new-fname','new-lname','new-email','new-phone'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function addMember() {
+  const fname = document.getElementById('new-fname').value.trim();
+  const lname = document.getElementById('new-lname').value.trim();
+  const email = document.getElementById('new-email').value.trim();
+  const phone = document.getElementById('new-phone').value.trim();
+  const role  = document.getElementById('new-role').value;
+  if (!fname || !email) { showToast('Name and email are required.'); return; }
+
+  const payload = { fname, lname, email, phone, role, status: 'active' };
+  if (LIVE()) {
+    try {
+      const data = await (await api('/admin/members', { method: 'POST', body: JSON.stringify(payload) })).json();
+      state.team.push(data.member);
+    } catch (e) { showToast(e.message); return; }
+  } else {
+    state.team.push({ memberId: 'local-' + (state.localSeq++), status: 'active', ...payload });
+  }
+  renderTeam();
+  updateCounts();
+  closeModal();
+  showToast(`${fname} ${lname} added.`);
+}
+
+async function removeMember(memberId) {
+  const m = state.team.find(x => x.memberId === memberId);
+  if (LIVE()) {
+    try { await api(`/admin/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' }); }
+    catch (e) { showToast(e.message); return; }
+  }
+  state.team = state.team.filter(x => x.memberId !== memberId);
+  renderTeam();
+  updateCounts();
+  showToast(`${m ? m.fname + ' ' + m.lname : 'Member'} removed.`);
+}
+
+// ─── TAGS ─────────────────────────────────────────────────────────────────────
+function renderTags(key) {
+  const container = document.getElementById('tags-'+key);
+  container.innerHTML = state.tags[key].map((v,i) => `
+    <span class="tag">
+      ${v}
+      <button class="tag-remove" onclick="removeTag('${key}',${i})" title="Remove">×</button>
+    </span>
+  `).join('');
+}
+
+function addTag(key) {
+  const input = document.getElementById('input-'+key);
+  const val = input.value.trim();
+  if (!val || state.tags[key].includes(val)) { input.value=''; return; }
+  state.tags[key].push(val);
+  input.value = '';
+  renderTags(key);
+  persistConfig();
+  showToast(`"${val}" added to ${key}.`);
+}
+
+function removeTag(key, idx) {
+  const val = state.tags[key][idx];
+  state.tags[key].splice(idx, 1);
+  renderTags(key);
+  persistConfig();
+  showToast(`"${val}" removed.`);
+}
+
+function handleTagKey(e, key) {
+  if (e.key === 'Enter') { e.preventDefault(); addTag(key); }
+}
+
+// ─── ROLE OVERRIDES ───────────────────────────────────────────────────────────
+function ensureOverride(role) {
+  if (!state.roleOverrides[role]) state.roleOverrides[role] = { track: [], priority: [] };
+}
+
+function renderRoleSections() {
+  const container = document.getElementById('role-sections');
+  const roles = ROLES;
+  roles.forEach(ensureOverride);
+  container.innerHTML = roles.map(role => {
+    const safeRole = role.replace(/[^a-z0-9]/gi,'_');
+    return `
+      <div class="role-section" id="rs-${safeRole}">
+        <div class="role-section-header" onclick="toggleRoleSection('${safeRole}')">
+          <span class="role-section-title">${role}</span>
+          <span class="role-section-chevron">▾</span>
+        </div>
+        <div class="role-section-body">
+          <div class="field">
+            <label>Additional track options</label>
+            <div id="rtags-${safeRole}-track" class="tag-list"></div>
+            <div class="tag-input-row">
+              <input type="text" id="rinput-${safeRole}-track" placeholder="Add track for ${role}…" onkeydown="handleRoleTagKey(event,'${safeRole}','track')">
+              <button class="btn btn-ghost btn-sm" onclick="addRoleTag('${safeRole}','track')">Add</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label>Additional priority juncture options</label>
+            <div id="rtags-${safeRole}-priority" class="tag-list"></div>
+            <div class="tag-input-row">
+              <input type="text" id="rinput-${safeRole}-priority" placeholder="Add juncture for ${role}…" onkeydown="handleRoleTagKey(event,'${safeRole}','priority')">
+              <button class="btn btn-ghost btn-sm" onclick="addRoleTag('${safeRole}','priority')">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  roles.forEach(role => {
+    const safeRole = role.replace(/[^a-z0-9]/gi,'_');
+    renderRoleTags(safeRole, 'track');
+    renderRoleTags(safeRole, 'priority');
+  });
+}
+
+function toggleRoleSection(safeRole) {
+  document.getElementById('rs-'+safeRole).classList.toggle('collapsed');
+}
+
+function renderRoleTags(safeRole, field) {
+  const role = safeRole.replace(/_/g, ' ');
+  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
+  if (!roleKey) return;
+  const tags = state.roleOverrides[roleKey][field];
+  const container = document.getElementById(`rtags-${safeRole}-${field}`);
+  if (!container) return;
+  container.innerHTML = tags.length === 0
+    ? `<span style="font-size:12px;color:var(--gray)">None — inherits global options only.</span>`
+    : tags.map((v,i) => `
+        <span class="tag">
+          ${v}
+          <button class="tag-remove" onclick="removeRoleTag('${safeRole}','${field}',${i})" title="Remove">×</button>
+        </span>
+      `).join('');
+}
+
+function addRoleTag(safeRole, field) {
+  const input = document.getElementById(`rinput-${safeRole}-${field}`);
+  const val = input.value.trim();
+  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
+  if (!val || !roleKey || state.roleOverrides[roleKey][field].includes(val)) { input.value=''; return; }
+  state.roleOverrides[roleKey][field].push(val);
+  input.value = '';
+  renderRoleTags(safeRole, field);
+  persistConfig();
+  showToast(`"${val}" added for ${roleKey}.`);
+}
+
+function removeRoleTag(safeRole, field, idx) {
+  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
+  if (!roleKey) return;
+  const val = state.roleOverrides[roleKey][field][idx];
+  state.roleOverrides[roleKey][field].splice(idx, 1);
+  renderRoleTags(safeRole, field);
+  persistConfig();
+  showToast(`"${val}" removed.`);
+}
+
+function handleRoleTagKey(e, safeRole, field) {
+  if (e.key === 'Enter') { e.preventDefault(); addRoleTag(safeRole, field); }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+(async function init() {
+  refreshConnStatus();
+  await loadAll();
+  // Connected URL but no key yet → prompt for it.
+  if (LIVE() && !API_KEY) openKeyModal();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,363 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: "NETT Work Around \u2014 backend for Tower5. Magic-link activity-report\
+  \ forms, role-configurable dropdowns, twice-daily email/SMS dispatch, DynamoDB storage,\
+  \ and CSV export.\n"
+Parameters:
+  FromEmail:
+    Type: String
+    Description: A verified SES "From" address (e.g. nett@tower5.com). Must be verified
+      in SES first.
+  AppBaseUrl:
+    Type: String
+    Description: 'Where nett-form.html is hosted, used to build magic links. Leave
+      EMPTY to use the CloudFront site created by this stack. Set it only to override
+      with a custom domain.
+
+      '
+    Default: ''
+  TokenTtlHours:
+    Type: Number
+    Description: How many hours a magic link stays valid.
+    Default: 36
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+    - dev
+    - prod
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures:
+    - arm64
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        MEMBERS_TABLE:
+          Ref: MembersTable
+        CONFIG_TABLE:
+          Ref: ConfigTable
+        TOKENS_TABLE:
+          Ref: TokensTable
+        RESPONSES_TABLE:
+          Ref: ResponsesTable
+        FROM_EMAIL:
+          Ref: FromEmail
+        TOKEN_TTL_HOURS:
+          Ref: TokenTtlHours
+Conditions:
+  HasAppBaseUrl:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: AppBaseUrl
+      - ''
+Resources:
+  MembersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: memberId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: memberId
+        KeyType: HASH
+  ConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: configKey
+        AttributeType: S
+      KeySchema:
+      - AttributeName: configKey
+        KeyType: HASH
+  TokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: token
+        AttributeType: S
+      KeySchema:
+      - AttributeName: token
+        KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+  ResponsesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: memberId
+        AttributeType: S
+      - AttributeName: submittedAt
+        AttributeType: S
+      KeySchema:
+      - AttributeName: memberId
+        KeyType: HASH
+      - AttributeName: submittedAt
+        KeyType: RANGE
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName:
+        Ref: Stage
+      Cors:
+        AllowMethods: '''GET,POST,DELETE,OPTIONS'''
+        AllowHeaders: '''Content-Type,x-api-key'''
+        AllowOrigin: '''*'''
+      Auth:
+        ApiKeyRequired: false
+        UsagePlan:
+          CreateUsagePlan: PER_API
+  PublicFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: public/handler.handler
+      CodeUri: PublicFn
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: MembersTable
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: ConfigTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: TokensTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ResponsesTable
+      Events:
+        GetForm:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /form
+            Method: get
+        Submit:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /submit
+            Method: post
+    Metadata:
+      SamResourceId: PublicFn
+  AdminFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: admin/handler.handler
+      Environment:
+        Variables:
+          APP_BASE_URL:
+            Fn::If:
+            - HasAppBaseUrl
+            - Ref: AppBaseUrl
+            - Fn::Sub: https://${SiteDistribution.DomainName}
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: MembersTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConfigTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: TokensTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ResponsesTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - ses:SendEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+          - sns:Publish
+          Resource: '*'
+      CodeUri: AdminFn
+      Events:
+        Members:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /admin/members
+            Method: any
+            Auth:
+              ApiKeyRequired: true
+        Member:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /admin/members/{id}
+            Method: any
+            Auth:
+              ApiKeyRequired: true
+        Config:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /admin/config
+            Method: any
+            Auth:
+              ApiKeyRequired: true
+        Dispatch:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /admin/dispatch
+            Method: post
+            Auth:
+              ApiKeyRequired: true
+        Export:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /admin/export
+            Method: get
+            Auth:
+              ApiKeyRequired: true
+    Metadata:
+      SamResourceId: AdminFn
+  ScheduledDispatchFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: scheduled/handler.handler
+      CodeUri: ScheduledDispatchFn
+      Environment:
+        Variables:
+          APP_BASE_URL:
+            Fn::If:
+            - HasAppBaseUrl
+            - Ref: AppBaseUrl
+            - Fn::Sub: https://${SiteDistribution.DomainName}
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: MembersTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: TokensTable
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: ResponsesTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - ses:SendEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+          - sns:Publish
+          Resource: '*'
+      Events:
+        EndOfDay:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 23 * * ? *)
+            Input: '{"audience":"all","reason":"eod"}'
+        MorningFollowup:
+          Type: Schedule
+          Properties:
+            Schedule: cron(30 15 * * ? *)
+            Input: '{"audience":"nonresponders","reason":"morning"}'
+    Metadata:
+      SamResourceId: ScheduledDispatchFn
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerEnforced
+  SiteOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name:
+          Fn::Sub: ${AWS::StackName}-site-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: nett-form.html
+        PriceClass: PriceClass_100
+        Origins:
+        - Id: s3origin
+          DomainName:
+            Fn::GetAtt:
+            - SiteBucket
+            - RegionalDomainName
+          OriginAccessControlId:
+            Fn::GetAtt:
+            - SiteOAC
+            - Id
+          S3OriginConfig:
+            OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: s3origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+          - GET
+          - HEAD
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AllowCloudFrontRead
+          Effect: Allow
+          Principal:
+            Service: cloudfront.amazonaws.com
+          Action: s3:GetObject
+          Resource:
+            Fn::Sub: ${SiteBucket.Arn}/*
+          Condition:
+            StringEquals:
+              AWS:SourceArn:
+                Fn::Sub: arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution.Id}
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL for the API. Put this in nett-form.html (API_BASE) and the
+      admin panel.
+    Value:
+      Fn::Sub: https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+  SiteUrl:
+    Description: CloudFront URL where the form is hosted. This is the magic-link base.
+    Value:
+      Fn::Sub: https://${SiteDistribution.DomainName}
+  SiteBucketName:
+    Description: Upload the HTML files here (aws s3 cp nett-form.html s3://<this>/).
+    Value:
+      Ref: SiteBucket
+  ApiKeyId:
+    Description: Run `aws apigateway get-api-key --api-key <this id> --include-value`
+      to get the admin key.
+    Value:
+      Ref: ApiApiKey

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws --version)",
+      "Bash(sam --version)",
+      "Bash(aws sts *)",
+      "Bash(aws configure *)",
+      "Bash(node -e ' *)",
+      "Bash(node --check /tmp/form_check.js)",
+      "Read(//opt/homebrew/Cellar/awscli/2.35.11/libexec/bin/**)",
+      "Bash(zsh -lic 'which aws; which sam; aws --version')"
+    ]
+  }
+}

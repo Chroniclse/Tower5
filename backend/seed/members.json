@@ -1,0 +1,7 @@
+[
+  { "fname": "Marcus",  "lname": "Webb",    "email": "m.webb@tower5.com",    "phone": "+13101110001", "role": "Director",           "status": "active" },
+  { "fname": "Priya",   "lname": "Nair",    "email": "p.nair@tower5.com",    "phone": "+13101110002", "role": "Editor",             "status": "active" },
+  { "fname": "Carlos",  "lname": "Fuentes", "email": "c.fuentes@tower5.com", "phone": "+13101110003", "role": "VFX / Tech",         "status": "active" },
+  { "fname": "Dana",    "lname": "Osei",    "email": "d.osei@tower5.com",    "phone": "+13101110004", "role": "Producer",           "status": "active" },
+  { "fname": "Tom",     "lname": "Hirsch",  "email": "t.hirsch@tower5.com",  "phone": "+13101110005", "role": "Legal / Compliance", "status": "active" }
+]
