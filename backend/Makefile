@@ -18,7 +18,7 @@ deploy: build
 # Re-run the schema migration on demand (idempotent).
 migrate:
 	@FN=$$(aws cloudformation describe-stack-resources --stack-name nett \
-	  --query "StackResources[?contains(LogicalResourceId,'MigrateFn')].PhysicalResourceId" \
+	  --query "StackResources[?ResourceType=='AWS::Lambda::Function' && LogicalResourceId=='MigrateFn'].PhysicalResourceId" \
 	  --output text); \
 	echo "Invoking $$FN..."; \
 	aws lambda invoke --function-name "$$FN" /tmp/tower5-migrate.json >/dev/null && \

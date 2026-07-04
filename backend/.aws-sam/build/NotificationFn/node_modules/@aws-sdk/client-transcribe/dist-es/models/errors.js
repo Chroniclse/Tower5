@@ -1,0 +1,71 @@
+import { TranscribeServiceException as __BaseException } from "./TranscribeServiceException";
+export class BadRequestException extends __BaseException {
+    name = "BadRequestException";
+    $fault = "client";
+    Message;
+    constructor(opts) {
+        super({
+            name: "BadRequestException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, BadRequestException.prototype);
+        this.Message = opts.Message;
+    }
+}
+export class ConflictException extends __BaseException {
+    name = "ConflictException";
+    $fault = "client";
+    Message;
+    constructor(opts) {
+        super({
+            name: "ConflictException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, ConflictException.prototype);
+        this.Message = opts.Message;
+    }
+}
+export class InternalFailureException extends __BaseException {
+    name = "InternalFailureException";
+    $fault = "server";
+    Message;
+    constructor(opts) {
+        super({
+            name: "InternalFailureException",
+            $fault: "server",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, InternalFailureException.prototype);
+        this.Message = opts.Message;
+    }
+}
+export class LimitExceededException extends __BaseException {
+    name = "LimitExceededException";
+    $fault = "client";
+    Message;
+    constructor(opts) {
+        super({
+            name: "LimitExceededException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, LimitExceededException.prototype);
+        this.Message = opts.Message;
+    }
+}
+export class NotFoundException extends __BaseException {
+    name = "NotFoundException";
+    $fault = "client";
+    Message;
+    constructor(opts) {
+        super({
+            name: "NotFoundException",
+            $fault: "client",
+            ...opts,
+        });
+        Object.setPrototypeOf(this, NotFoundException.prototype);
+        this.Message = opts.Message;
+    }
+}

@@ -8,6 +8,7 @@ confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 parameter_overrides = "FromEmail=\"bdenis1420@gmail.com\" AppBaseUrl=\"\" TokenTtlHours=\"36\" Stage=\"prod\" SchemaVersion=\"1\""
 image_repositories = []
+region = "us-west-2"
 
 [default.global.parameters]
-region = "us-east-2"
+region = "us-west-2"

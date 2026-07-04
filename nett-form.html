@@ -3,720 +3,317 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NETT — Activity Report</title>
+<title>ETC — Daily Log</title>
 <style>
   :root {
-    --red: #c0392b;
-    --red-dark: #922b21;
-    --red-hover: #a93226;
-    --red-muted: rgba(192,57,43,0.08);
-    --black: #1a1a1a;
-    --text: #1a1a1a;
-    --text-mid: #444;
-    --text-muted: #777;
-    --text-light: #aaa;
-    --border: #ddd;
-    --border-dark: #bbb;
-    --surface: #fff;
-    --surface2: #f7f7f7;
-    --surface3: #f0f0f0;
-    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --red:#c0392b; --red-dark:#922b21; --red-hover:#a93226; --red-muted:rgba(192,57,43,0.08);
+    --black:#1a1a1a; --text:#1a1a1a; --text-mid:#444; --text-muted:#777; --text-light:#aaa;
+    --border:#ddd; --border-dark:#bbb; --surface:#fff; --surface2:#f7f7f7; --surface3:#f0f0f0;
+    --font:'Helvetica Neue',Helvetica,Arial,sans-serif;
   }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--surface2); color:var(--text); font-family:var(--font); font-size:14px; min-height:100vh; padding-bottom:40px; }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* HEADER */
+  .site-header { background:var(--red); padding:0 0 0 32px; display:flex; align-items:stretch; justify-content:space-between; min-height:72px; box-shadow:0 2px 8px rgba(0,0,0,0.18); }
+  .header-left { display:flex; align-items:center; gap:16px; padding:12px 0; }
+  /* Replace the ETC wordmark below with <img src="etc-logo.svg" class="logo-img"> when you have the asset. */
+  .logo { font-size:24px; font-weight:900; letter-spacing:0.04em; color:#fff; }
+  .logo-divider { width:1px; height:34px; background:rgba(255,255,255,0.35); }
+  .project-line { font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,0.82); margin-bottom:3px; }
+  .header-text h1 { font-size:18px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:#fff; }
+  .header-text .date { font-size:11px; color:rgba(255,255,255,0.7); margin-top:2px; font-style:italic; }
+  .header-right { background:var(--red-dark); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 26px; min-width:120px; text-align:center; }
+  .header-right .member-name { font-size:13px; font-weight:800; color:#fff; letter-spacing:0.04em; }
 
-  body {
-    background: var(--surface2);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 14px;
-    min-height: 100vh;
-    padding-bottom: 60px;
-  }
+  /* INSTRUCTIONS */
+  .instructions { background:var(--surface); border-bottom:2px solid var(--red); padding:12px 32px; }
+  .instructions-bottom { border-bottom:none; border-top:2px solid var(--red); margin-top:12px; }
+  .instructions-inner { max-width:860px; margin:0 auto; }
+  .instructions strong { font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px; }
+  .instructions ol { display:flex; flex-wrap:wrap; gap:4px 28px; padding-left:18px; }
+  .instructions li { font-size:12px; color:var(--text-muted); line-height:1.5; flex:0 0 28%; min-width:200px; }
 
-  /* ── HEADER ── */
-  .site-header {
-    background: var(--red);
-    padding: 0 0 0 32px;
-    display: flex;
-    align-items: stretch;
-    justify-content: space-between;
-    min-height: 68px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  }
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 0;
-  }
-  .logo {
-    font-size: 22px;
-    font-weight: 900;
-    letter-spacing: 0.06em;
-    color: #fff;
-    text-transform: uppercase;
-  }
-  .logo-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.35); }
-  .header-text h1 {
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #fff;
-  }
-  .header-text p {
-    font-size: 11px;
-    color: rgba(255,255,255,0.7);
-    margin-top: 2px;
-    font-style: italic;
-  }
-  .header-right {
-    background: var(--red-dark);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0 28px;
-    min-width: 120px;
-    text-align: center;
-  }
-  .header-right .member-name {
-    font-size: 13px;
-    font-weight: 800;
-    color: #fff;
-    letter-spacing: 0.04em;
-  }
-  .header-right .member-role {
-    font-size: 10px;
-    color: rgba(255,255,255,0.65);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-top: 3px;
-  }
+  /* CONTAINER */
+  .container { max-width:860px; margin:20px auto; padding:0 16px; }
 
-  /* ── INSTRUCTIONS BANNER ── */
-  .instructions {
-    background: var(--surface);
-    border-bottom: 2px solid var(--red);
-    padding: 14px 32px;
-  }
-  .instructions-inner {
-    max-width: 860px;
-    margin: 0 auto;
-  }
-  .instructions strong {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--red);
-    display: block;
-    margin-bottom: 6px;
-  }
-  .instructions ol {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 24px;
-    padding-left: 18px;
-  }
-  .instructions li {
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
+  /* ACTIVITY CARD */
+  .activity-card { background:var(--surface); border:1px solid var(--border); border-radius:4px; margin-bottom:14px; overflow:hidden; }
+  .activity-card-header { background:var(--surface3); border-bottom:1px solid var(--border); padding:9px 16px; display:flex; align-items:center; justify-content:space-between; }
+  .activity-number { font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); }
+  .remove-btn { background:none; border:none; font-size:18px; color:var(--text-light); cursor:pointer; line-height:1; padding:0 2px; } .remove-btn:hover { color:var(--red); }
+  .activity-card-body { padding:16px 20px; }
 
-  /* ── MAIN CONTAINER ── */
-  .container {
-    max-width: 860px;
-    margin: 28px auto;
-    padding: 0 16px;
-  }
+  .dropdown-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px; }
+  @media (max-width:600px){ .dropdown-row { grid-template-columns:1fr; } }
+  label { display:block; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-mid); margin-bottom:5px; }
+  select, textarea { background:#fff; border:1px solid var(--border-dark); border-radius:3px; color:var(--text); font-family:var(--font); font-size:13px; padding:8px 12px; outline:none; width:100%; transition:border-color 0.15s,box-shadow 0.15s; }
+  select:focus, textarea:focus { border-color:var(--red); box-shadow:0 0 0 2px rgba(192,57,43,0.1); }
+  .response-textarea { resize:vertical; min-height:120px; line-height:1.6; }
 
-  /* ── ACTIVITY CARD ── */
-  .activity-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    margin-bottom: 16px;
-    overflow: hidden;
-    position: relative;
-  }
-  .activity-card-header {
-    background: var(--surface3);
-    border-bottom: 1px solid var(--border);
-    padding: 10px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .activity-number {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .remove-btn {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: var(--text-light);
-    cursor: pointer;
-    line-height: 1;
-    padding: 0 2px;
-    transition: color 0.15s;
-  }
-  .remove-btn:hover { color: var(--red); }
+  .example-toggle { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--red); cursor:pointer; background:none; border:none; padding:0; margin-bottom:10px; font-family:var(--font); }
+  .example-toggle:hover { color:var(--red-dark); }
+  .example-block { background:#fdf5f5; border:1px solid rgba(192,57,43,0.2); border-left:3px solid var(--red); border-radius:3px; padding:11px 14px; margin-bottom:12px; font-size:12px; color:var(--text-mid); line-height:1.7; display:none; }
+  .example-block.visible { display:block; }
 
-  .activity-card-body { padding: 20px; }
+  .prompt-hint { margin-top:7px; font-size:11px; color:var(--text-muted); line-height:1.7; }
+  .prompt-hint span { display:inline-block; background:var(--surface3); border:1px solid var(--border); border-radius:3px; padding:1px 7px; margin:2px 2px 2px 0; font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-mid); }
 
-  /* ── DROPDOWN ROW ── */
-  .dropdown-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
+  /* RECORDER */
+  .recorder { display:flex; align-items:center; gap:14px; margin:12px 0 4px; flex-wrap:wrap; }
+  .rec-btn { display:inline-flex; align-items:center; gap:9px; background:var(--surface); border:2px solid var(--red); border-radius:40px; padding:7px 15px; font-family:var(--font); font-size:11px; font-weight:800; letter-spacing:0.07em; text-transform:uppercase; color:var(--red); cursor:pointer; }
+  .rec-btn:hover { background:var(--red-muted); }
+  .rec-btn.recording { background:var(--red); color:#fff; }
+  .rec-dot { width:9px; height:9px; border-radius:50%; background:currentColor; }
+  .rec-btn.recording .rec-dot { animation:pulse 1s infinite; } @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+  .rec-status { font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+  .spinner { width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--red); border-radius:50%; animation:spin 0.8s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* ── FORM FIELDS ── */
-  label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-mid);
-    margin-bottom: 5px;
-  }
-  .field { margin-bottom: 0; }
+  /* FILES */
+  .file-row { margin-top:16px; }
+  .file-btn { display:inline-flex; align-items:center; gap:8px; background:var(--surface); border:2px dashed var(--border-dark); border-radius:4px; padding:9px 15px; font-family:var(--font); font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted); cursor:pointer; } .file-btn:hover { border-color:var(--red); color:var(--red); background:var(--red-muted); }
+  .file-status { font-size:12px; color:var(--text-muted); margin-left:12px; }
+  .file-list { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+  .file-item { display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--surface3); border:1px solid var(--border); border-radius:3px; padding:6px 10px; font-size:12px; color:var(--text-mid); }
+  .file-remove { background:none; border:none; color:var(--text-light); font-size:16px; cursor:pointer; line-height:1; } .file-remove:hover { color:var(--red); }
 
-  select, input[type="url"], textarea {
-    background: #fff;
-    border: 1px solid var(--border-dark);
-    border-radius: 3px;
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 13px;
-    padding: 8px 12px;
-    outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
-    width: 100%;
-  }
-  select:focus, input[type="url"]:focus, textarea:focus {
-    border-color: var(--red);
-    box-shadow: 0 0 0 2px rgba(192,57,43,0.1);
-  }
-  select option { background: #fff; }
+  /* ADD + SUBMIT */
+  .actions-row { display:flex; gap:14px; align-items:stretch; }
+  .add-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--surface); border:2px dashed var(--border-dark); border-radius:4px; padding:14px 20px; font-family:var(--font); font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); cursor:pointer; } .add-btn:hover { border-color:var(--red); color:var(--red); background:var(--red-muted); }
+  .add-icon { font-size:20px; font-weight:300; line-height:1; }
+  .submit-btn { background:var(--red); color:#fff; border:none; border-radius:4px; padding:14px 36px; font-family:var(--font); font-size:12px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; cursor:pointer; white-space:nowrap; } .submit-btn:hover { background:var(--red-hover); } .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
+  .submit-note { font-size:11px; color:var(--text-muted); text-align:center; margin-top:10px; }
 
-  /* ── ACTIVITY TEXTAREA ── */
-  .activity-field { margin-bottom: 12px; }
-  .activity-textarea {
-    resize: vertical;
-    min-height: 160px;
-    line-height: 1.6;
-    font-size: 13px;
-  }
-  .activity-hint {
-    margin-top: 6px;
-    font-size: 11px;
-    color: var(--text-muted);
-    line-height: 1.6;
-  }
-  .activity-hint span {
-    display: inline-block;
-    background: var(--surface3);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 1px 7px;
-    margin: 2px 2px 2px 0;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-mid);
-  }
+  .success-screen { display:none; text-align:center; padding:60px 20px; } .success-screen.visible { display:block; }
+  .success-icon { width:64px; height:64px; background:var(--red); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:28px; color:#fff; }
+  .success-screen h2 { font-size:20px; font-weight:800; margin-bottom:8px; } .success-screen p { font-size:13px; color:var(--text-muted); }
 
-  /* ── LINK FIELD ── */
-  .link-field { display: flex; gap: 8px; align-items: flex-end; }
-  .link-field input { flex: 1; }
-  .link-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 5px;
-  }
-
-  /* ── EXAMPLE BLOCK ── */
-  .example-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--red);
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    margin-bottom: 12px;
-    font-family: var(--font);
-  }
-  .example-toggle:hover { color: var(--red-dark); }
-  .example-block {
-    background: #fdf5f5;
-    border: 1px solid rgba(192,57,43,0.2);
-    border-left: 3px solid var(--red);
-    border-radius: 3px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    font-size: 12px;
-    color: var(--text-mid);
-    line-height: 1.7;
-    display: none;
-  }
-  .example-block.visible { display: block; }
-  .example-label {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--red);
-    margin-bottom: 6px;
-  }
-
-  /* ── ADD BUTTON ── */
-  .add-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 28px;
-  }
-  .add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface);
-    border: 2px dashed var(--border-dark);
-    border-radius: 4px;
-    padding: 12px 20px;
-    font-family: var(--font);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    cursor: pointer;
-    width: 100%;
-    justify-content: center;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
-  }
-  .add-btn:hover {
-    border-color: var(--red);
-    color: var(--red);
-    background: var(--red-muted);
-  }
-  .add-icon {
-    font-size: 20px;
-    font-weight: 300;
-    line-height: 1;
-  }
-
-  /* ── SUBMIT SECTION ── */
-  .submit-section {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--red);
-    border-radius: 4px;
-    padding: 22px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-  }
-  .submit-note {
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.5;
-    flex: 1;
-  }
-  .submit-btn {
-    background: var(--red);
-    color: #fff;
-    border: none;
-    border-radius: 3px;
-    padding: 13px 32px;
-    font-family: var(--font);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.15s;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .submit-btn:hover { background: var(--red-hover); }
-  .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
-
-  /* ── SUCCESS STATE ── */
-  .success-screen {
-    display: none;
-    text-align: center;
-    padding: 60px 20px;
-  }
-  .success-screen.visible { display: block; }
-  .success-icon {
-    width: 64px;
-    height: 64px;
-    background: var(--red);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 20px;
-    font-size: 28px;
-    color: #fff;
-  }
-  .success-screen h2 {
-    font-size: 20px;
-    font-weight: 800;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .success-screen p { font-size: 13px; color: var(--text-muted); }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed; bottom: 24px; right: 24px;
-    background: var(--black);
-    border-left: 3px solid var(--red);
-    border-radius: 3px;
-    padding: 12px 20px; font-size: 13px; color: #f0f0f0;
-    opacity: 0; transform: translateY(8px);
-    transition: opacity 0.2s, transform 0.2s;
-    pointer-events: none; z-index: 999;
-  }
-  #toast.show { opacity: 1; transform: translateY(0); }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 600px) {
-    .site-header { padding-left: 16px; }
-    .container { padding: 0 12px; margin: 16px auto; }
-    .dropdown-row { grid-template-columns: 1fr; }
-    .instructions { padding: 12px 16px; }
-    .submit-section { flex-direction: column; align-items: stretch; }
-    .submit-btn { text-align: center; }
-    .header-right { padding: 0 16px; min-width: 90px; }
-  }
+  #toast { position:fixed; bottom:24px; right:24px; background:var(--black); border-left:3px solid var(--red); border-radius:3px; padding:12px 20px; font-size:13px; color:#f0f0f0; opacity:0; transform:translateY(8px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; z-index:999; max-width:340px; } #toast.show { opacity:1; transform:translateY(0); }
+  @media (max-width:600px){ .site-header { padding-left:16px; } .container { padding:0 12px; } .actions-row { flex-direction:column; } }
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
 <div class="site-header">
   <div class="header-left">
-    <div class="logo">TOWER5</div>
+    <div class="logo">ETC</div>
     <div class="logo-divider"></div>
     <div class="header-text">
-      <h1>NETT — Daily Activity Report</h1>
-      <p id="header-date">Loading…</p>
+      <div class="project-line" id="project-line">—</div>
+      <h1>Daily Log</h1>
+      <div class="date" id="header-date">Loading…</div>
     </div>
   </div>
-  <div class="header-right">
-    <div class="member-name" id="member-name">Marcus Webb</div>
-    <div class="member-role" id="member-role">Director</div>
-  </div>
+  <div class="header-right"><div class="member-name" id="member-name">—</div></div>
 </div>
 
-<!-- INSTRUCTIONS -->
-<div class="instructions">
-  <div class="instructions-inner">
-    <strong>How to fill out this form</strong>
-    <ol>
-      <li>Select the Phase, Track and Priority Juncture for each activity.</li>
-      <li>Describe your activity in detail — hit each of the prompts below.</li>
-      <li>Paste any relevant document or website links.</li>
-      <li>Use the <strong>+ Add activity</strong> button to log multiple entries.</li>
-      <li>Hit <strong>Submit</strong> when done — takes about 2–5 minutes.</li>
-    </ol>
-  </div>
-</div>
-
-<!-- MAIN FORM -->
 <div class="container">
   <div id="form-area">
     <div id="activities-container"></div>
-
-    <!-- ADD BUTTON -->
-    <button class="add-btn" onclick="addActivity()">
-      <span class="add-icon">+</span> Add another activity
-    </button>
-
-    <!-- SUBMIT -->
-    <div class="submit-section">
-      <div class="submit-note">
-        Your responses are saved securely. You'll receive a confirmation once submitted.<br>
-        If you have nothing new to report today, you can note "No change since last submission."
-      </div>
-      <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit report</button>
+    <div class="actions-row">
+      <button class="add-btn" onclick="addActivity()"><span class="add-icon">+</span> Add another activity</button>
+      <button class="submit-btn" id="submit-btn" onclick="submitForm()">Submit log</button>
     </div>
+    <div class="submit-note">Your log is saved securely — takes about 3–5 minutes.</div>
   </div>
 
-  <!-- SUCCESS -->
   <div class="success-screen" id="success-screen">
     <div class="success-icon">✓</div>
-    <h2>Report submitted</h2>
-    <p>Thanks, <span id="success-name"></span>. Your activity report has been recorded.<br>See you tomorrow.</p>
+    <h2>Log submitted</h2>
+    <p>Thanks, <span id="success-name"></span>. Your daily log has been recorded.</p>
+  </div>
+</div>
+
+<div class="instructions instructions-bottom">
+  <div class="instructions-inner">
+    <strong>How to fill out this form</strong>
+    <ol>
+      <li>Tag each activity with its Phase, Track and Technology Juncture.</li>
+      <li>Describe the activity — address the prompts shown.</li>
+      <li>Prefer to talk? Press Record and it's transcribed into the text.</li>
+      <li>Attach any relevant files.</li>
+      <li>Use <strong>+ Add activity</strong> for more, then <strong>Submit</strong>.</li>
+    </ol>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-// ── CONFIG ───────────────────────────────────────────────────────────────
-// Set API_BASE to your deployed API (from the SAM `ApiBaseUrl` output) to go live.
-// Leave it '' to run the form standalone with mock data (preview mode).
+// ── CONFIG ──────────────────────────────────────────────────────────────────
 const API_BASE = '';
-
-// The magic-link token comes from the URL: nett-form.html?t=XXXX
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const LIVE = !!(API_BASE && TOKEN);
 
-// These start as mock fallbacks; in live mode they're overwritten by GET /form.
-let USER = { name: 'Marcus Webb', role: 'Director', token: TOKEN || 'preview' };
+let USER = { name:'Preview User', firstName:'Preview' };
+let PROJECT = { details:'TERRANIUM — R&D Project #10' };
+let SURVEY = { survey_id:null, title:'Daily Log', feedback_type:'text' };
+let OPTIONS = { phase:[], track:[], priority:[] };
+let EXAMPLE = '';
 
-let OPTIONS = {
-  phase: ['Development', 'Pre-Production', 'Principal Photography', 'Post-Production', 'Distribution'],
-  track: ['Creative', 'Technical / Production', 'Legal', 'Compliance', 'Knowledge Management'],
-  priority: ['Volumetric Data', 'Performance Capture', 'Visual Consistency', 'Asynchronous Assembly', 'AI Integration'],
-};
-
-// Single example string for the member's role (live mode sets this from the API).
-let EXAMPLE_TEXT = 'Testing gen AI tools for video rendering, applying standard criteria. Main tools tested are Seedance, Veo, Kling, WAN and Minimax. Working with Tom and Roberto. Discovered major differences in the degree of control, ease of use and fidelity.';
-
-// ── STATE ──────────────────────────────────────────────────────────────────
 let activityCount = 0;
+const fileAssets = {};                 // n -> [ {asset_type,bucket_name,file_name,original} ]
+let recordingN = null, mediaRecorder = null, recStream = null, recChunks = [];
 
-// ── INIT ───────────────────────────────────────────────────────────────────
+// ── INIT ────────────────────────────────────────────────────────────────────
 init();
-
 async function init() {
   document.getElementById('header-date').textContent =
-    new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-  // Live mode: pull this member's config from the magic link.
-  if (API_BASE && TOKEN) {
+    new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  if (LIVE) {
     try {
       const res = await fetch(`${API_BASE}/form?t=${encodeURIComponent(TOKEN)}`);
-      if (!res.ok) {
-        const { error } = await res.json().catch(() => ({}));
-        return showFatal(error || 'This link is invalid, already used, or expired.');
-      }
-      const data = await res.json();
-      USER = { name: data.member.name, role: data.member.role, token: TOKEN };
-      OPTIONS = data.options;
-      EXAMPLE_TEXT = data.example || EXAMPLE_TEXT;
-    } catch (e) {
-      return showFatal('Could not load your form. Please check your connection and retry.');
-    }
+      if (!res.ok) { const { error } = await res.json().catch(()=>({})); return showFatal(error || 'This link is invalid, already used, or expired.'); }
+      const d = await res.json();
+      USER = d.user || USER; PROJECT = d.project || PROJECT;
+      SURVEY = (d.surveys && d.surveys[0]) || SURVEY;
+      OPTIONS = d.options || OPTIONS; EXAMPLE = d.example || '';
+    } catch { return showFatal('Could not load your form. Check your connection and retry.'); }
   }
-
-  document.getElementById('member-name').textContent = USER.name;
-  document.getElementById('member-role').textContent = USER.role;
-  document.getElementById('success-name').textContent = USER.name.split(' ')[0];
-  addActivity(); // Start with one row
+  document.getElementById('project-line').textContent = PROJECT.details || '';
+  document.getElementById('member-name').textContent = USER.name || '—';
+  document.getElementById('success-name').textContent = (USER.firstName || (USER.name||'').split(' ')[0] || '');
+  addActivity();
 }
+function showFatal(msg){ document.getElementById('form-area').innerHTML =
+  `<div style="background:#fff;border:1px solid var(--border);border-top:3px solid var(--red);border-radius:4px;padding:40px;text-align:center">
+     <h2 style="font-size:18px;margin-bottom:8px">Link unavailable</h2><p style="color:var(--text-muted);font-size:13px">${msg}</p></div>`; }
 
-function showFatal(msg) {
-  document.getElementById('form-area').innerHTML =
-    `<div style="background:#fff;border:1px solid var(--border);border-top:3px solid var(--red);border-radius:4px;padding:40px;text-align:center">
-       <h2 style="font-size:18px;margin-bottom:8px">Link unavailable</h2>
-       <p style="color:var(--text-muted);font-size:13px">${msg}</p>
-     </div>`;
+// ── ACTIVITY CARDS ───────────────────────────────────────────────────────────
+function buildSelect(key, id, label) {
+  const opts = (OPTIONS[key]||[]).map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+  return `<div><label>${label}</label><select id="${id}"><option value="">— Select —</option>${opts}</select></div>`;
 }
-
-// ── BUILD SELECT ───────────────────────────────────────────────────────────
-function buildSelect(key, id, placeholder) {
-  const opts = OPTIONS[key].map(v => `<option value="${v}">${v}</option>`).join('');
-  return `
-    <div class="field">
-      <label>${placeholder}</label>
-      <select id="${id}" onchange="updateExampleVisibility(${id.match(/\d+/)[0]})">
-        <option value="">— Select —</option>
-        ${opts}
-      </select>
-    </div>
-  `;
-}
-
-// ── ADD ACTIVITY ───────────────────────────────────────────────────────────
 function addActivity() {
-  activityCount++;
-  const n = activityCount;
-  const exampleText = EXAMPLE_TEXT;
-  const isFirst = n === 1;
-
+  activityCount++; const n = activityCount; fileAssets[n] = [];
+  const isFirst = document.querySelectorAll('.activity-card').length === 0;
   const card = document.createElement('div');
-  card.className = 'activity-card';
-  card.id = `activity-${n}`;
+  card.className = 'activity-card'; card.id = `activity-${n}`;
   card.innerHTML = `
-    <div class="activity-card-header">
-      <span class="activity-number">Activity ${n}</span>
-      ${!isFirst ? `<button class="remove-btn" onclick="removeActivity(${n})" title="Remove this activity">×</button>` : ''}
-    </div>
+    <div class="activity-card-header"><span class="activity-number">Activity</span>
+      ${!isFirst ? `<button class="remove-btn" onclick="removeActivity(${n})" title="Remove">×</button>` : ''}</div>
     <div class="activity-card-body">
-
-      <!-- DROPDOWNS -->
       <div class="dropdown-row">
-        ${buildSelect('phase', `phase-${n}`, 'Phase')}
-        ${buildSelect('track', `track-${n}`, 'Track')}
-        ${buildSelect('priority', `priority-${n}`, 'Priority juncture')}
+        ${buildSelect('phase',`phase-${n}`,'Phase')}
+        ${buildSelect('track',`track-${n}`,'Track')}
+        ${buildSelect('priority',`juncture-${n}`,'Technology Juncture')}
       </div>
-
-      <!-- EXAMPLE TOGGLE -->
-      <button class="example-toggle" onclick="toggleExample(${n})">
-        <span id="example-arrow-${n}">▶</span> See example for your role
-      </button>
-      <div class="example-block" id="example-${n}">
-        <div class="example-label">Example — ${USER.role}</div>
-        ${exampleText}
+      <button class="example-toggle" onclick="toggleExample(${n})"><span id="ex-arrow-${n}">▶</span> See example for your role</button>
+      <div class="example-block" id="example-${n}">${EXAMPLE ? escapeHtml(EXAMPLE) : 'Examples for your role are coming soon.'}</div>
+      <label>Activity description</label>
+      <textarea class="response-textarea" id="response-${n}" placeholder="Describe what you worked on…"></textarea>
+      <div class="prompt-hint">Try to address:
+        <span>Task</span><span>Purpose</span><span>Team members</span><span>Approach</span>
+        <span>Tools used</span><span>Challenge</span><span>Solution</span><span>Insights</span></div>
+      <div class="recorder">
+        <button type="button" class="rec-btn" id="rec-btn-${n}" onclick="toggleRecording(${n})"><span class="rec-dot"></span><span id="rec-label-${n}">Record</span></button>
+        <span class="rec-status" id="rec-status-${n}"></span>
       </div>
-
-      <!-- ACTIVITY TEXTAREA -->
-      <div class="activity-field">
-        <label>Activity description</label>
-        <textarea
-          class="activity-textarea"
-          id="activity-text-${n}"
-          placeholder="Describe what you worked on today…"
-        ></textarea>
-        <div class="activity-hint">
-          Try to address:
-          <span>What</span>
-          <span>Purpose</span>
-          <span>Who</span>
-          <span>Approach</span>
-          <span>Tools used</span>
-          <span>Challenges</span>
-          <span>Insights</span>
-        </div>
+      <div class="file-row">
+        <input type="file" id="file-${n}" multiple style="display:none" onchange="onFileChange(${n})">
+        <button type="button" class="file-btn" onclick="document.getElementById('file-${n}').click()">📎 Add files</button>
+        <span class="file-status" id="file-status-${n}"></span>
+        <div class="file-list" id="file-list-${n}"></div>
       </div>
-
-      <!-- LINK FIELD -->
-      <div>
-        <label>Link to document or website (optional)</label>
-        <input
-          type="url"
-          id="link-${n}"
-          placeholder="https://…"
-        >
-        <div class="link-hint">Paste a Google Drive link, reference doc, tool URL, etc.</div>
-      </div>
-
-    </div>
-  `;
-
+    </div>`;
   document.getElementById('activities-container').appendChild(card);
-  if (n > 1) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  renumberCards();
+  renumber();
+  if (!isFirst) card.scrollIntoView({ behavior:'smooth', block:'center' });
 }
+function removeActivity(n){ if(recordingN===n) stopRecording(); const c=document.getElementById(`activity-${n}`); if(c) c.remove(); delete fileAssets[n]; renumber(); }
+function renumber(){ document.querySelectorAll('.activity-card .activity-number').forEach((el,i)=>el.textContent=`Activity ${i+1}`); }
+function toggleExample(n){ const b=document.getElementById(`example-${n}`), a=document.getElementById(`ex-arrow-${n}`); b.classList.toggle('visible'); a.textContent=b.classList.contains('visible')?'▼':'▶'; }
 
-// ── REMOVE ACTIVITY ────────────────────────────────────────────────────────
-function removeActivity(n) {
-  const card = document.getElementById(`activity-${n}`);
-  if (card) card.remove();
-  renumberCards();
+// ── RECORDING → TRANSCRIPTION ────────────────────────────────────────────────
+function pickMime(){ for(const m of ['audio/webm','audio/mp4','audio/ogg']){ if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m)) return m; } return ''; }
+const extFor = (m)=> m.includes('mp4')?'mp4':m.includes('ogg')?'ogg':'webm';
+async function toggleRecording(n){
+  if(recordingN===n){ stopRecording(); return; }
+  if(recordingN!==null) return showToast('Finish the current recording first.');
+  if(!window.MediaRecorder||!navigator.mediaDevices) return showToast('Recording is not supported in this browser.');
+  if(!LIVE) return showToast('Transcription needs the live API.');
+  try{ recStream=await navigator.mediaDevices.getUserMedia({audio:true}); }catch{ return showToast('Microphone permission was denied.'); }
+  const mime=pickMime(); recChunks=[];
+  mediaRecorder=new MediaRecorder(recStream, mime?{mimeType:mime}:undefined);
+  mediaRecorder.ondataavailable=(e)=>{ if(e.data.size) recChunks.push(e.data); };
+  mediaRecorder.onstop=()=>handleRecording(n,new Blob(recChunks,{type:mediaRecorder.mimeType||mime||'audio/webm'}));
+  mediaRecorder.start(500); recordingN=n; setRecUI(n,true,'Recording… press stop when done.');
 }
-
-function renumberCards() {
-  const cards = document.querySelectorAll('.activity-card');
-  cards.forEach((card, i) => {
-    const numEl = card.querySelector('.activity-number');
-    if (numEl) numEl.textContent = `Activity ${i + 1}`;
-  });
+function stopRecording(){ if(mediaRecorder&&mediaRecorder.state!=='inactive') mediaRecorder.stop(); if(recStream) recStream.getTracks().forEach(t=>t.stop()); const n=recordingN; recordingN=null; if(n) setRecUI(n,false,''); }
+function setRecUI(n,isRec,statusText,spin){ const b=document.getElementById(`rec-btn-${n}`); if(!b) return; document.getElementById(`rec-label-${n}`).textContent=isRec?'Stop':'Record'; b.classList.toggle('recording',isRec); const s=document.getElementById(`rec-status-${n}`); if(s) s.innerHTML=(spin?'<span class="spinner"></span>':'')+(statusText||''); }
+async function handleRecording(n,blob){
+  const mime=blob.type||'audio/webm', ext=extFor(mime);
+  if(blob.size < 2500){ setRecUI(n,false,'No audio captured — speak for a second or two, then stop.'); return; }
+  try{
+    setRecUI(n,false,'Uploading…',true);
+    const up=await fetch(`${API_BASE}/upload-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,asset_type:'audio',filename:`recording.${ext}`,content_type:mime})}).then(r=>r.json());
+    if(!up.url) throw new Error(up.error||'Could not get an upload URL.');
+    const put=await fetch(up.url,{method:'PUT',headers:{'Content-Type':mime},body:blob}); if(!put.ok) throw new Error('Upload failed.');
+    setRecUI(n,false,'Transcribing… (up to a minute)',true);
+    const start=await fetch(`${API_BASE}/transcribe`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,bucket:up.bucket,key:up.key})}).then(r=>r.json());
+    if(!start.ticket) throw new Error(start.error||'Could not start transcription.');
+    const text=await pollTranscript(start.ticket);
+    if(text==null) throw new Error('Transcription timed out — try again, or type your report.');
+    if(!text.trim()){ setRecUI(n,false,'No speech detected in the recording — try again, or type.'); return; }
+    appendToResponse(n,text); setRecUI(n,false,'✓ Transcript added.');
+  }catch(err){ setRecUI(n,false,''); showToast(err.message||'Transcription failed.'); }
 }
+async function pollTranscript(ticket,tries=40){
+  for(let i=0;i<tries;i++){ await new Promise(r=>setTimeout(r,3000));
+    const res=await fetch(`${API_BASE}/transcribe?t=${encodeURIComponent(TOKEN)}&ticket=${encodeURIComponent(ticket)}`).then(r=>r.json()).catch(()=>({}));
+    if(res.status==='done') return (res.text||'').trim();
+    if(res.status==='failed') throw new Error('Transcription failed on the server.'); }
+  return null;
+}
+function appendToResponse(n,text){ if(!text) return; const ta=document.getElementById(`response-${n}`); ta.value=ta.value.trim()?`${ta.value.trim()}\n\n${text}`:text; ta.focus(); }
 
-// ── EXAMPLE TOGGLE ─────────────────────────────────────────────────────────
-function toggleExample(n) {
-  const block = document.getElementById(`example-${n}`);
-  const arrow = document.getElementById(`example-arrow-${n}`);
-  if (block) {
-    block.classList.toggle('visible');
-    arrow.textContent = block.classList.contains('visible') ? '▼' : '▶';
+// ── FILES (multiple per activity) ────────────────────────────────────────────
+async function onFileChange(n){
+  const input=document.getElementById(`file-${n}`); const files=Array.from(input.files||[]); input.value=''; if(!files.length) return;
+  const statusEl=document.getElementById(`file-status-${n}`);
+  for(const f of files){
+    if(!LIVE){ fileAssets[n].push({preview:true,original:f.name}); renderFileList(n); continue; }
+    statusEl.textContent=`Uploading ${f.name}…`;
+    try{
+      const up=await fetch(`${API_BASE}/upload-url`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:TOKEN,asset_type:'file',filename:f.name,content_type:f.type||'application/octet-stream'})}).then(r=>r.json());
+      if(!up.url) throw new Error(up.error||'Could not get an upload URL.');
+      const put=await fetch(up.url,{method:'PUT',headers:{'Content-Type':f.type||'application/octet-stream'},body:f}); if(!put.ok) throw new Error('Upload failed.');
+      fileAssets[n].push({asset_type:'file',bucket_name:up.bucket,file_name:up.key,original:f.name}); renderFileList(n);
+    }catch(err){ showToast(`Upload failed for ${f.name}: ${err.message||''}`); }
   }
+  statusEl.textContent='';
 }
+function renderFileList(n){ const l=document.getElementById(`file-list-${n}`); if(!l) return;
+  l.innerHTML=(fileAssets[n]||[]).map((a,i)=>`<div class="file-item"><span>📄 ${escapeHtml(a.original)}${a.preview?' (preview)':''}</span><button type="button" class="file-remove" onclick="removeFile(${n},${i})">×</button></div>`).join(''); }
+function removeFile(n,idx){ if(!fileAssets[n]) return; fileAssets[n].splice(idx,1); renderFileList(n); }
 
-function updateExampleVisibility(n) { /* hook for future per-track examples */ }
-
-// ── SUBMIT ─────────────────────────────────────────────────────────────────
-function submitForm() {
-  const cards = document.querySelectorAll('.activity-card');
-  const activities = [];
-  let hasError = false;
-
-  cards.forEach((card, i) => {
-    const n = card.id.replace('activity-', '');
-    const phase    = document.getElementById(`phase-${n}`)?.value;
-    const track    = document.getElementById(`track-${n}`)?.value;
-    const priority = document.getElementById(`priority-${n}`)?.value;
-    const text     = document.getElementById(`activity-text-${n}`)?.value?.trim();
-    const link     = document.getElementById(`link-${n}`)?.value?.trim();
-
-    if (!text) {
-      showToast(`Please fill in the activity description for Activity ${i + 1}.`);
-      hasError = true;
-      return;
-    }
-    activities.push({ phase, track, priority, text, link });
+// ── SUBMIT ───────────────────────────────────────────────────────────────────
+async function submitForm(){
+  if(recordingN!==null) return showToast('Stop the recording before submitting.');
+  const cards=document.querySelectorAll('.activity-card'); const reports=[]; let blank=false;
+  cards.forEach((card,i)=>{
+    const n=card.id.replace('activity-','');
+    const description=(document.getElementById(`response-${n}`)?.value||'').trim();
+    if(!description){ blank=true; showToast(`Please fill in the description for Activity ${i+1}.`); return; }
+    const assets=(fileAssets[n]||[]).filter(a=>!a.preview).map(a=>({asset_type:'file',bucket_name:a.bucket_name,file_name:a.file_name}));
+    reports.push({ description, assets,
+      project_phase_mapping_uuid: document.getElementById(`phase-${n}`)?.value || undefined,
+      project_track_mapping_uuid: document.getElementById(`track-${n}`)?.value || undefined,
+      project_priority_juncture_mapping_uuid: document.getElementById(`juncture-${n}`)?.value || undefined });
   });
-
-  if (hasError || activities.length === 0) return;
-
-  const payload = { token: USER.token, activities };
-  const btn = document.getElementById('submit-btn');
-
-  // Preview mode (no backend): just show the success screen.
-  if (!API_BASE || !TOKEN) {
-    console.log('Submitting (preview):', JSON.stringify(payload, null, 2));
+  if(blank || !reports.length) return;
+  const payload={ token:TOKEN, survey_id:SURVEY.survey_id||undefined, reports };
+  if(!LIVE){ console.log('Submitting (preview):',payload); return showSuccess(); }
+  const btn=document.getElementById('submit-btn'); btn.disabled=true; btn.textContent='Submitting…';
+  try{
+    const res=await fetch(`${API_BASE}/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!res.ok){ const {error}=await res.json().catch(()=>({})); throw new Error(error||'Submission failed.'); }
     showSuccess();
-    return;
-  }
-
-  // Live mode: POST to the API.
-  btn.disabled = true;
-  btn.textContent = 'Submitting…';
-  fetch(`${API_BASE}/submit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        const { error } = await res.json().catch(() => ({}));
-        throw new Error(error || 'Submission failed.');
-      }
-      showSuccess();
-    })
-    .catch((err) => {
-      showToast(err.message);
-      btn.disabled = false;
-      btn.textContent = 'Submit report';
-    });
+  }catch(err){ showToast(err.message); btn.disabled=false; btn.textContent='Submit log'; }
 }
-
-function showSuccess() {
-  document.getElementById('form-area').style.display = 'none';
-  document.getElementById('success-screen').classList.add('visible');
-}
-
-// ── TOAST ──────────────────────────────────────────────────────────────────
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3500);
-}
+function showSuccess(){ document.getElementById('form-area').style.display='none'; document.getElementById('success-screen').classList.add('visible'); }
+function showToast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),4000); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 </script>
 </body>
 </html>

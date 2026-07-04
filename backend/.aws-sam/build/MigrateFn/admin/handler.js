@@ -1,90 +1,655 @@
-// Admin endpoints. Protected at the API Gateway layer by an API key (x-api-key).
-//   GET/POST          /admin/members         → list / add team members
-//   DELETE            /admin/members/{id}     → remove a member
-//   GET/PUT           /admin/config           → read / replace dropdown config
-//   POST              /admin/dispatch         → send forms now
-//   GET               /admin/export           → download all responses as CSV
-const { randomUUID } = require('crypto');
-const { ScanCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { doc, TABLES } = require('../shared/db');
+// Admin service. Protected at the API Gateway layer by an API key (x-api-key).
+// Routed via a proxy resource: /admin/{proxy+}
+//
+//   GET    /admin/<resource>            → list   (optionally ?col=value filters)
+//   POST   /admin/<resource>            → create
+//   GET    /admin/<resource>/{id}       → get one
+//   PUT    /admin/<resource>/{id}       → update
+//   DELETE /admin/<resource>/{id}       → delete
+//   POST   /admin/dispatch              → send survey links now
+//   GET    /admin/export                → download submissions as CSV
+//
+// Tenant-scoped resources need a tenant: pass it as the `x-tenant-id` header
+// (or ?tenant_id=…). SuperAdmin catalog + global-config resources are global.
 const { json, csv, parseBody } = require('../shared/http');
-const { getConfig, putConfig } = require('../shared/config');
+const { rows, one, transaction } = require('../shared/sql');
+const { makeCrud } = require('../shared/crud');
 const { dispatch } = require('../shared/dispatch');
+const { authContext, allowedProjectIds } = require('../shared/authz');
+const {
+  CognitoIdentityProviderClient, AdminCreateUserCommand,
+  AdminSetUserPasswordCommand, AdminDeleteUserCommand,
+} = require('@aws-sdk/client-cognito-identity-provider');
+
+const cognito = new CognitoIdentityProviderClient({});
+const USER_POOL_ID = process.env.USER_POOL_ID;
+
+// resource path segment → CRUD definition
+const RESOURCES = {
+  // Tenancy + global catalog (SuperAdmin)
+  tenants:    makeCrud({ table: 'tenants', columns: ['name', 'slug', 'is_active'] }),
+  roles:      makeCrud({ table: 'roles', columns: ['role_name'] }),
+  projects:   makeCrud({ table: 'projects', columns: ['project_details'] }),
+  phases:     makeCrud({ table: 'project_phases', columns: ['phase_name'] }),
+  tracks:     makeCrud({ table: 'project_tracks', columns: ['track_name'] }),
+  junctures:  makeCrud({ table: 'project_priority_junctures', columns: ['juncture_name'] }),
+  'project-roles': makeCrud({
+    table: 'project_roles_mapping',
+    columns: ['project_uuid', 'roles_uuid'], uuidCols: ['project_uuid', 'roles_uuid'],
+  }),
+
+  // Global config
+  'tenant-feedback': makeCrud({
+    table: 'tenant_feedback', columns: ['schedule_send', 'schedule_resend', 'send_frequency'],
+    casts: { schedule_send: 'time', schedule_resend: 'time' },
+  }),
+  'track-schedule':  makeCrud({
+    table: 'track_schedule', columns: ['schedule_send', 'schedule_resend'],
+    casts: { schedule_send: 'time', schedule_resend: 'time' },
+  }),
+
+  // Tenant-scoped
+  users: makeCrud({ table: 'users', columns: ['email', 'fname', 'lname', 'phone'], tenantScoped: true }),
+  'project-users': makeCrud({
+    table: 'project_user_mapping', tenantScoped: true,
+    columns: ['user_uuid', 'project_uuid'], uuidCols: ['user_uuid', 'project_uuid'],
+  }),
+  'user-roles': makeCrud({
+    table: 'project_user_role_mapping', tenantScoped: true,
+    columns: ['project_user_mapping_uuid', 'project_roles_mapping_uuid', 'is_deleted', 'deleted_at'],
+    uuidCols: ['project_user_mapping_uuid', 'project_roles_mapping_uuid'],
+    casts: { deleted_at: 'timestamptz' },
+  }),
+  'project-phases': makeCrud({
+    table: 'project_phase_mapping', tenantScoped: true,
+    columns: ['project_phases_uuid', 'project_uuid'], uuidCols: ['project_phases_uuid', 'project_uuid'],
+  }),
+  'project-tracks': makeCrud({
+    table: 'project_track_mapping', tenantScoped: true,
+    columns: ['project_tracks_uuid', 'project_uuid'], uuidCols: ['project_tracks_uuid', 'project_uuid'],
+  }),
+  'project-junctures': makeCrud({
+    table: 'project_priority_juncture_mapping', tenantScoped: true,
+    columns: ['project_junctures_uuid', 'project_uuid'], uuidCols: ['project_junctures_uuid', 'project_uuid'],
+  }),
+  'user-phases': makeCrud({
+    table: 'user_phase_mapping', tenantScoped: true,
+    columns: ['project_user_mapping_uuid', 'project_phase_mapping_uuid',
+              'project_priority_juncture_mapping_uuid', 'project_track_mapping_uuid'],
+    uuidCols: ['project_user_mapping_uuid', 'project_phase_mapping_uuid',
+               'project_priority_juncture_mapping_uuid', 'project_track_mapping_uuid'],
+  }),
+  surveys: makeCrud({
+    table: 'surveys', tenantScoped: true,
+    columns: ['project_uuid', 'title', 'feedback_type', 'send_days', 'send_time', 'resend_time'], uuidCols: ['project_uuid'],
+    casts: { feedback_type: 'survey_feedback_type', send_time: 'time', resend_time: 'time' },
+  }),
+  submissions: makeCrud({
+    table: 'survey_form', tenantScoped: true,
+    columns: ['survey_uuid', 'project_user_mapping_uuid', 'description', 'submitted_at'],
+    uuidCols: ['survey_uuid', 'project_user_mapping_uuid'],
+    casts: { submitted_at: 'timestamptz' },
+  }),
+  assets: makeCrud({
+    table: 'digital_assets', tenantScoped: true,
+    columns: ['survey_form_uuid', 'asset_type', 'bucket_name', 'bucket_id', 'file_name', 'url'],
+    uuidCols: ['survey_form_uuid'],
+    casts: { asset_type: 'digital_asset_type' },
+  }),
+};
+
+// Resources a TENANT admin may read but only a SUPER admin may write
+// (global building blocks + project creation + tenancy).
+const SUPER_WRITE_ONLY = new Set([
+  'tenants', 'roles', 'phases', 'tracks', 'junctures', 'tenant-feedback', 'track-schedule', 'projects',
+]);
+
+const forbidden = (msg) => { const e = new Error(msg); e.statusCode = 403; return e; };
+
+// Tenant scope: a super admin may target any tenant via header/query; a tenant
+// admin is pinned to their own claim.
+function tenantOf(event, auth) {
+  if (auth.isSuper) {
+    const h = event.headers || {};
+    const q = event.queryStringParameters || {};
+    return h['x-tenant-id'] || h['X-Tenant-Id'] || q.tenant_id || auth.tenantId || null;
+  }
+  return auth.tenantId || null;
+}
+
+// Build the SQL predicate that limits a resource to a tenant admin's projects.
+// `ids` is the allowed project-uuid array (never null here).
+function projectScope(resource, ids) {
+  if (!ids.length) return { sql: '1=0', params: {} };           // assigned to nothing
+  const ph = ids.map((_, i) => `:sp${i}::uuid`).join(', ');
+  const params = {};
+  ids.forEach((v, i) => { params[`sp${i}`] = v; });
+  const inProj = `in (${ph})`;
+  switch (resource) {
+    case 'projects':          return { sql: `id ${inProj}`, params };
+    case 'project-users':
+    case 'project-roles':
+    case 'project-phases':
+    case 'project-tracks':
+    case 'project-junctures':  return { sql: `project_uuid ${inProj}`, params };
+    case 'users':              return { sql: `id in (select user_uuid from project_user_mapping where project_uuid ${inProj})`, params };
+    case 'user-phases':        return { sql: `project_user_mapping_uuid in (select id from project_user_mapping where project_uuid ${inProj})`, params };
+    case 'user-roles':         return { sql: `project_user_mapping_uuid in (select id from project_user_mapping where project_uuid ${inProj})`, params };
+    case 'surveys':            return { sql: `project_uuid ${inProj}`, params };
+    case 'submissions':        return { sql: `survey_uuid in (select id from surveys where project_uuid ${inProj})`, params };
+    case 'assets':             return { sql: `survey_form_uuid in (select sf.id from survey_form sf join surveys s on s.id = sf.survey_uuid join user_phase_mapping uphm on uphm.id = s.user_phase_mapping_uuid join project_user_mapping pum on pum.id = uphm.project_user_mapping_uuid where pum.project_uuid ${inProj})`, params };
+    default:                   return null; // catalog / global config — readable unscoped
+  }
+}
+
+// On create, verify the project the new row attaches to is in the admin's scope.
+async function assertCreateInScope(resource, body, allowed) {
+  const ok = (pid) => allowed.includes(pid);
+  if (['project-users', 'project-roles', 'project-phases', 'project-tracks', 'project-junctures', 'surveys'].includes(resource)) {
+    if (!ok(body.project_uuid)) throw forbidden('That project is outside your assigned projects.');
+    return;
+  }
+  if (resource === 'user-phases') {
+    const r = await one(`select project_uuid from project_user_mapping where id = :id::uuid`, { id: body.project_user_mapping_uuid });
+    if (!r || !ok(r.project_uuid)) throw forbidden('That project is outside your assigned projects.');
+    return;
+  }
+  // users / submissions / assets: tenant-scoped, no per-project create gate
+}
 
 exports.handler = async (event) => {
   const method = event.httpMethod;
-  const path = event.resource || event.path || '';
-
   try {
     if (method === 'OPTIONS') return json(200, {});
+    const auth = authContext(event);
 
-    if (path.endsWith('/members') && method === 'GET') return listMembers();
-    if (path.endsWith('/members') && method === 'POST') return addMember(event);
-    if (path.includes('/members/') && method === 'DELETE') return removeMember(event);
+    const proxy = (event.pathParameters && event.pathParameters.proxy) ||
+      (event.path || '').replace(/^\/admin\/?/, '');
+    const [resource, id] = proxy.split('/').filter(Boolean);
 
-    if (path.endsWith('/config') && method === 'GET') return json(200, await getConfig());
-    if (path.endsWith('/config') && method === 'PUT') return json(200, await putConfig(parseBody(event)));
+    // ── Identity / scope for the UI ──────────────────────────────────────────
+    if (resource === 'me' && method === 'GET') return whoami(event, auth);
 
-    if (path.endsWith('/dispatch') && method === 'POST') return json(200, await dispatch(parseBody(event)));
+    // ── Admin management (super admin only) ──────────────────────────────────
+    if (resource === 'admins') return handleAdmins(event, auth, method, id);
 
-    if (path.endsWith('/export') && method === 'GET') return exportCsv();
+    const allowed = await allowedProjectIds(auth); // null = super (all)
 
-    return json(404, { error: 'Not found' });
+    // ── Dispatch ─────────────────────────────────────────────────────────────
+    if (resource === 'dispatch' && method === 'POST') {
+      const body = parseBody(event);
+      const tenantId = tenantOf(event, auth) || body.tenant_id;
+      if (!tenantId) return json(400, { error: 'tenant_id is required' });
+      if (allowed !== null && (!body.project_id || !allowed.includes(body.project_id))) {
+        return json(403, { error: 'Pick one of your assigned projects to dispatch.' });
+      }
+      return json(200, await dispatch({ ...body, tenantId }));
+    }
+
+    // ── Export ───────────────────────────────────────────────────────────────
+    if (resource === 'export' && method === 'GET') return exportCsv(event, auth, allowed);
+
+    // ── Dashboard stats + filtered query explorer ────────────────────────────
+    if (resource === 'stats' && method === 'GET') return statsHandler(event, auth, allowed);
+    if (resource === 'query' && method === 'GET') return queryHandler(event, auth, allowed);
+
+    // ── Team: add a member to a project + assign their options, atomically ────
+    if (resource === 'team') return handleTeam(event, auth, allowed, method, id);
+
+    // ── Per-survey submission status (who submitted / who hasn't) ─────────────
+    if (resource === 'survey-status' && method === 'GET') return surveyStatus(event, auth, allowed);
+
+    // ── Per-role option templates (tenant) ───────────────────────────────────
+    if (resource === 'role-templates') return handleRoleTemplates(event, auth, allowed, method, id);
+
+    // ── Generic CRUD ─────────────────────────────────────────────────────────
+    const repo = RESOURCES[resource];
+    if (!repo) return json(404, { error: `Unknown resource: ${resource || '(none)'}` });
+
+    const tenantId = tenantOf(event, auth);
+    if (repo.tenantScoped && !tenantId) return json(400, { error: `${resource} is tenant-scoped — no tenant on the token.` });
+
+    const isWrite = method !== 'GET';
+    if (isWrite && !auth.isSuper && SUPER_WRITE_ONLY.has(resource)) {
+      return json(403, { error: `Only a super admin can modify ${resource}.` });
+    }
+    const scope = allowed === null ? null : projectScope(resource, allowed);
+
+    switch (method) {
+      case 'GET':
+        return id
+          ? respond(await repo.get(tenantId, id, scope), 200, 404)
+          : json(200, { [resource]: await repo.list(tenantId, event.queryStringParameters || {}, scope) });
+      case 'POST': {
+        const body = parseBody(event);
+        if (allowed !== null) await assertCreateInScope(resource, body, allowed);
+        return respond(await repo.create(tenantId, body), 201, 400);
+      }
+      case 'PUT':
+      case 'PATCH':
+        if (!id) return json(400, { error: 'id required in path' });
+        return respond(await repo.update(tenantId, id, parseBody(event), scope), 200, 404);
+      case 'DELETE':
+        if (!id) return json(400, { error: 'id required in path' });
+        return respond(await repo.remove(tenantId, id, scope), 200, 404);
+      default:
+        return json(405, { error: 'Method not allowed' });
+    }
   } catch (err) {
+    if (err && err.statusCode) return json(err.statusCode, { error: err.message });
     console.error(err);
-    return json(500, { error: 'Internal error' });
+    return json(500, { error: err.message || 'Internal error' });
   }
 };
 
-async function listMembers() {
-  const { Items = [] } = await doc.send(new ScanCommand({ TableName: TABLES.members }));
-  Items.sort((a, b) => (a.fname || '').localeCompare(b.fname || ''));
-  return json(200, { members: Items });
-}
+const respond = (row, okStatus, missStatus) =>
+  row ? json(okStatus, row) : json(missStatus, { error: 'Not found' });
 
-async function addMember(event) {
-  const b = parseBody(event);
-  if (!b.fname || !b.email) return json(400, { error: 'First name and email are required.' });
-  const member = {
-    memberId: randomUUID(),
-    fname: b.fname.trim(),
-    lname: (b.lname || '').trim(),
-    email: b.email.trim(),
-    phone: (b.phone || '').trim(),
-    role: b.role || 'Director',
-    status: b.status || 'active',
-    createdAt: new Date().toISOString(),
-  };
-  await doc.send(new PutCommand({ TableName: TABLES.members, Item: member }));
-  return json(201, { member });
-}
-
-async function removeMember(event) {
-  const id = (event.pathParameters || {}).id;
-  if (!id) return json(400, { error: 'Missing member id.' });
-  await doc.send(new DeleteCommand({ TableName: TABLES.members, Key: { memberId: id } }));
-  return json(200, { ok: true, removed: id });
-}
-
-// Flatten every response into one CSV row per activity — the "clean spreadsheet".
-function csvCell(v) {
-  const s = String(v == null ? '' : v).replace(/"/g, '""');
-  return `"${s}"`;
-}
-
-async function exportCsv() {
-  const { Items = [] } = await doc.send(new ScanCommand({ TableName: TABLES.responses }));
-  const header = ['submittedAt', 'memberId', 'name', 'role', 'activityNo', 'phase', 'track', 'priority', 'activity', 'link', 'responseId'];
-  const rows = [header.map(csvCell).join(',')];
-
-  Items.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
-  for (const r of Items) {
-    (r.activities || []).forEach((a, i) => {
-      rows.push([
-        r.submittedAt, r.memberId, r.name, r.role, i + 1,
-        a.phase, a.track, a.priority, a.text, a.link, r.responseId,
-      ].map(csvCell).join(','));
-    });
+// ── /admin/me — role + the projects this admin may act on ───────────────────
+async function whoami(event, auth) {
+  const allowed = await allowedProjectIds(auth);
+  const tenantId = tenantOf(event, auth);
+  let projects;
+  if (allowed === null) {
+    projects = await rows(`select id, project_details from projects order by created_at desc`);
+  } else if (!allowed.length) {
+    projects = [];
+  } else {
+    const ph = allowed.map((_, i) => `:p${i}::uuid`).join(', ');
+    const params = {}; allowed.forEach((v, i) => { params[`p${i}`] = v; });
+    projects = await rows(`select id, project_details from projects where id in (${ph})`, params);
   }
-  return csv(`nett-responses-${new Date().toISOString().slice(0, 10)}.csv`, rows.join('\n'));
+  return json(200, { email: auth.email, role: auth.role, isSuper: auth.isSuper, tenantId, projects });
+}
+
+// ── /admin/admins — super admin manages tenant-admin logins + assignments ───
+async function handleAdmins(event, auth, method, id) {
+  if (!auth.isSuper) return json(403, { error: 'Super admin only.' });
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+
+  if (method === 'GET') {
+    const r = await rows(
+      `select admin_sub, admin_email, project_uuid from admin_project_mapping where tenant_id = :t::uuid order by admin_email`,
+      { t: tenantId });
+    const map = {};
+    for (const x of r) (map[x.admin_sub] || (map[x.admin_sub] = { sub: x.admin_sub, email: x.admin_email, projects: [] })).projects.push(x.project_uuid);
+    return json(200, { admins: Object.values(map) });
+  }
+
+  if (method === 'POST') {
+    const b = parseBody(event);
+    if (!b.email || !b.password) return json(400, { error: 'email and password are required' });
+    const projectIds = Array.isArray(b.project_ids) ? b.project_ids : [];
+    let sub;
+    try {
+      const created = await cognito.send(new AdminCreateUserCommand({
+        UserPoolId: USER_POOL_ID, Username: b.email, MessageAction: 'SUPPRESS',
+        UserAttributes: [
+          { Name: 'email', Value: b.email }, { Name: 'email_verified', Value: 'true' },
+          { Name: 'custom:role', Value: 'tenant_admin' }, { Name: 'custom:tenant_id', Value: tenantId },
+        ],
+      }));
+      sub = (created.User.Attributes.find((a) => a.Name === 'sub') || {}).Value;
+      await cognito.send(new AdminSetUserPasswordCommand({ UserPoolId: USER_POOL_ID, Username: b.email, Password: b.password, Permanent: true }));
+    } catch (e) { return json(400, { error: e.message }); }
+    for (const pid of projectIds) {
+      await one(
+        `insert into admin_project_mapping (tenant_id, admin_sub, admin_email, project_uuid)
+         values (:t::uuid, :s, :e, :p::uuid) on conflict (admin_sub, project_uuid) do nothing returning id`,
+        { t: tenantId, s: sub, e: b.email, p: pid });
+    }
+    return json(201, { sub, email: b.email, projects: projectIds });
+  }
+
+  if ((method === 'PUT' || method === 'PATCH') && id) {
+    const b = parseBody(event);
+    const projectIds = Array.isArray(b.project_ids) ? b.project_ids : [];
+    const existing = await one(`select admin_email from admin_project_mapping where admin_sub = :s and tenant_id = :t::uuid limit 1`, { s: id, t: tenantId });
+    const email = b.email || (existing && existing.admin_email) || null;
+    await rows(`delete from admin_project_mapping where admin_sub = :s and tenant_id = :t::uuid`, { s: id, t: tenantId });
+    for (const pid of projectIds) {
+      await one(
+        `insert into admin_project_mapping (tenant_id, admin_sub, admin_email, project_uuid)
+         values (:t::uuid, :s, :e, :p::uuid) on conflict (admin_sub, project_uuid) do nothing returning id`,
+        { t: tenantId, s: id, e: email, p: pid });
+    }
+    return json(200, { ok: true, sub: id, projects: projectIds });
+  }
+
+  if (method === 'DELETE' && id) {
+    const r = await one(`select admin_email from admin_project_mapping where admin_sub = :s and tenant_id = :t::uuid limit 1`, { s: id, t: tenantId });
+    await rows(`delete from admin_project_mapping where admin_sub = :s and tenant_id = :t::uuid`, { s: id, t: tenantId });
+    if (r && r.admin_email) { try { await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: r.admin_email })); } catch {} }
+    return json(200, { ok: true });
+  }
+
+  return json(405, { error: 'Method not allowed' });
+}
+
+// ── /admin/team — tenant admin adds a member to their project and assigns
+//    their phase/track/juncture options in one atomic step. ──────────────────
+function teamProject(event, auth, allowed) {
+  if (auth.isSuper) return (event.queryStringParameters || {}).project_id || null;
+  return (allowed && allowed[0]) || null;   // a tenant admin's single project
+}
+
+const uniq = (a) => [...new Set(a)];
+
+// The track/juncture catalog ids defined as a role's template for a project.
+async function roleTemplate(tenantId, projectId, roleId) {
+  if (!roleId) return { tracks: [], junctures: [] };
+  const r = await rows(
+    `select kind, catalog_uuid from role_template where tenant_id = :t::uuid and project_uuid = :p::uuid and role_uuid = :r::uuid`,
+    { t: tenantId, p: projectId, r: roleId });
+  const out = { tracks: [], junctures: [] };
+  for (const x of r) { if (x.kind === 'track') out.tracks.push(x.catalog_uuid); else if (x.kind === 'juncture') out.junctures.push(x.catalog_uuid); }
+  return out;
+}
+
+// Upsert the project_*_mapping for each catalog id, then attach it to the
+// project-user via user_option. Runs inside a transaction `q`.
+async function assignOptions(q, tenantId, projectId, pumId, sets) {
+  const upsertMapping = async (table, fk, catId) => {
+    const [r] = await q(
+      `insert into ${table} (tenant_id, ${fk}, project_uuid) values (:t::uuid,:c::uuid,:p::uuid)
+       on conflict (tenant_id, ${fk}, project_uuid) do update set project_uuid = excluded.project_uuid returning id`,
+      { t: tenantId, c: catId, p: projectId });
+    return r.id;
+  };
+  const add = async (kind, table, fk, catIds) => {
+    for (const c of (catIds || [])) {
+      const mid = await upsertMapping(table, fk, c);
+      await q(`insert into user_option (tenant_id, project_user_mapping_uuid, kind, mapping_uuid)
+               values (:t::uuid,:pum::uuid,:k,:m::uuid) on conflict (project_user_mapping_uuid, kind, mapping_uuid) do nothing`,
+        { t: tenantId, pum: pumId, k: kind, m: mid });
+    }
+  };
+  await add('phase', 'project_phase_mapping', 'project_phases_uuid', sets.phases);
+  await add('track', 'project_track_mapping', 'project_tracks_uuid', sets.tracks);
+  await add('juncture', 'project_priority_juncture_mapping', 'project_junctures_uuid', sets.junctures);
+}
+
+async function handleTeam(event, auth, allowed, method, id) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+
+  if (method === 'GET') {
+    const projectId = teamProject(event, auth, allowed);
+    if (!projectId) return json(400, { error: 'No project in scope.' });
+    const members = await rows(
+      `select pum.id as pum_id, u.id as user_id, u.fname, u.lname, u.email, u.phone,
+              pum.role_uuid, r.role_name
+         from project_user_mapping pum join users u on u.id = pum.user_uuid
+         left join roles r on r.id = pum.role_uuid
+        where pum.tenant_id = :t::uuid and pum.project_uuid = :p::uuid
+        order by u.fname, u.lname`, { t: tenantId, p: projectId });
+    if (members.length) {
+      const ids = members.map((m) => m.pum_id);
+      const ph = ids.map((_, i) => `:o${i}::uuid`).join(', ');
+      const op = { t: tenantId }; ids.forEach((v, i) => { op[`o${i}`] = v; });
+      // include the catalog id (cat) so the edit UI can pre-check options
+      const opts = await rows(
+        `select uo.project_user_mapping_uuid as pum, uo.kind,
+                coalesce(pf.phase_name, tk.track_name, jc.juncture_name) as name,
+                coalesce(pm.project_phases_uuid, tm.project_tracks_uuid, jm.project_junctures_uuid) as cat
+           from user_option uo
+           left join project_phase_mapping pm on pm.id = uo.mapping_uuid
+           left join project_phases pf on pf.id = pm.project_phases_uuid
+           left join project_track_mapping tm on tm.id = uo.mapping_uuid
+           left join project_tracks tk on tk.id = tm.project_tracks_uuid
+           left join project_priority_juncture_mapping jm on jm.id = uo.mapping_uuid
+           left join project_priority_junctures jc on jc.id = jm.project_junctures_uuid
+          where uo.tenant_id = :t::uuid and uo.project_user_mapping_uuid in (${ph})`, op);
+      const byPum = {};
+      members.forEach((m) => { byPum[m.pum_id] = { phase: [], track: [], juncture: [] }; m.options = byPum[m.pum_id]; });
+      for (const o of opts) { if (byPum[o.pum] && byPum[o.pum][o.kind]) byPum[o.pum][o.kind].push({ name: o.name, cat: o.cat }); }
+    }
+    return json(200, { team: members });
+  }
+
+  if (method === 'POST') {
+    const b = parseBody(event);
+    const projectId = teamProject(event, auth, allowed) || b.project_id;
+    if (!projectId) return json(400, { error: 'No project in scope.' });
+    if (allowed !== null && !allowed.includes(projectId)) return json(403, { error: 'Project outside your scope.' });
+    if (!b.email) return json(400, { error: 'Email is required.' });
+    const tpl = await roleTemplate(tenantId, projectId, b.role_uuid);
+    const sets = { phases: b.phases || [], tracks: uniq([...(b.tracks || []), ...tpl.tracks]), junctures: uniq([...(b.junctures || []), ...tpl.junctures]) };
+    const result = await transaction(async (q) => {
+      const [u] = await q(`insert into users (tenant_id, email, fname, lname, phone) values (:t::uuid,:e,:f,:l,:p) returning id`,
+        { t: tenantId, e: b.email, f: b.fname || null, l: b.lname || null, p: b.phone || null });
+      const [pum] = await q(`insert into project_user_mapping (tenant_id, user_uuid, project_uuid, role_uuid) values (:t::uuid,:u::uuid,:p::uuid,:r::uuid) returning id`,
+        { t: tenantId, u: u.id, p: projectId, r: b.role_uuid || null });
+      await assignOptions(q, tenantId, projectId, pum.id, sets);
+      return { user_id: u.id, pum_id: pum.id };
+    });
+    return json(201, result);
+  }
+
+  // Reconfigure an existing member's options (replace the set).
+  if ((method === 'PUT' || method === 'PATCH') && id) {
+    const b = parseBody(event);
+    const m = await one(`select project_uuid from project_user_mapping where id = :id::uuid and tenant_id = :t::uuid`, { id, t: tenantId });
+    if (!m) return json(404, { error: 'Not found' });
+    if (allowed !== null && !allowed.includes(m.project_uuid)) return json(403, { error: 'Outside your scope.' });
+    const tpl = await roleTemplate(tenantId, m.project_uuid, b.role_uuid);
+    const sets = { phases: b.phases || [], tracks: uniq([...(b.tracks || []), ...tpl.tracks]), junctures: uniq([...(b.junctures || []), ...tpl.junctures]) };
+    await transaction(async (q) => {
+      await q(`update project_user_mapping set role_uuid = :r::uuid where id = :id::uuid and tenant_id = :t::uuid`, { r: b.role_uuid || null, id, t: tenantId });
+      await q(`delete from user_option where project_user_mapping_uuid = :pum::uuid and tenant_id = :t::uuid`, { pum: id, t: tenantId });
+      await assignOptions(q, tenantId, m.project_uuid, id, sets);
+    });
+    return json(200, { ok: true });
+  }
+
+  if (method === 'DELETE' && id) {
+    const m = await one(`select user_uuid, project_uuid from project_user_mapping where id = :id::uuid and tenant_id = :t::uuid`, { id, t: tenantId });
+    if (!m) return json(404, { error: 'Not found' });
+    if (allowed !== null && !allowed.includes(m.project_uuid)) return json(403, { error: 'Outside your scope.' });
+    await rows(`delete from project_user_mapping where id = :id::uuid and tenant_id = :t::uuid`, { id, t: tenantId });
+    await rows(`delete from users where id = :u::uuid and tenant_id = :t::uuid`, { u: m.user_uuid, t: tenantId });
+    return json(200, { ok: true });
+  }
+
+  return json(405, { error: 'Method not allowed' });
+}
+
+// ── /admin/survey-status — per-survey: which members submitted, which didn't.
+//    Optional ?date=YYYY-MM-DD scopes "submitted" to one send/day; the response
+//    also lists the distinct dates the survey has received submissions. ───────
+async function surveyStatus(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  const q = event.queryStringParameters || {};
+  const sid = q.survey_id;
+  if (!sid) return json(400, { error: 'survey_id is required' });
+  const s = await one(`select project_uuid from surveys where id = :id::uuid and tenant_id = :t::uuid`, { id: sid, t: tenantId });
+  if (!s) return json(404, { error: 'Survey not found' });
+  if (allowed !== null && !allowed.includes(s.project_uuid)) return json(403, { error: 'Outside your scope.' });
+
+  const params = { sid, t: tenantId, p: s.project_uuid };
+  let dcond = '';
+  if (q.date) { dcond = 'and sf.submitted_at::date = :d::date'; params.d = q.date; }
+
+  const members = await rows(
+    `select u.fname, u.lname, u.email,
+            exists(select 1 from survey_form sf where sf.survey_uuid = :sid::uuid and sf.project_user_mapping_uuid = pum.id ${dcond}) as submitted,
+            (select max(sf.submitted_at) from survey_form sf where sf.survey_uuid = :sid::uuid and sf.project_user_mapping_uuid = pum.id ${dcond}) as last_submitted
+       from project_user_mapping pum join users u on u.id = pum.user_uuid
+      where pum.tenant_id = :t::uuid and pum.project_uuid = :p::uuid
+      order by u.fname, u.lname`, params);
+  const dates = await rows(
+    `select distinct sf.submitted_at::date::text as d from survey_form sf where sf.survey_uuid = :sid::uuid order by d desc`, { sid });
+  const submitted = members.filter((m) => m.submitted).length;
+  return json(200, { members, submitted, total: members.length, dates: dates.map((x) => x.d) });
+}
+
+// ── /admin/role-templates — tenant admin sets per-role default tracks/junctures
+async function handleRoleTemplates(event, auth, allowed, method, id) {
+  const tenantId = tenantOf(event, auth);
+  const projectId = teamProject(event, auth, allowed);
+  if (!projectId) return json(400, { error: 'No project in scope.' });
+
+  if (method === 'GET') {
+    const r = await rows(`select role_uuid, kind, catalog_uuid from role_template where tenant_id = :t::uuid and project_uuid = :p::uuid`, { t: tenantId, p: projectId });
+    const map = {};
+    for (const x of r) { const m = (map[x.role_uuid] || (map[x.role_uuid] = { role_uuid: x.role_uuid, tracks: [], junctures: [] })); (x.kind === 'track' ? m.tracks : m.junctures).push(x.catalog_uuid); }
+    return json(200, { templates: Object.values(map) });
+  }
+  if ((method === 'PUT' || method === 'PATCH') && id) {   // id = role_uuid
+    const b = parseBody(event);
+    const tracks = Array.isArray(b.tracks) ? b.tracks : [];
+    const junctures = Array.isArray(b.junctures) ? b.junctures : [];
+    await transaction(async (qx) => {
+      await qx(`delete from role_template where tenant_id = :t::uuid and project_uuid = :p::uuid and role_uuid = :r::uuid`, { t: tenantId, p: projectId, r: id });
+      for (const c of tracks) await qx(`insert into role_template (tenant_id, project_uuid, role_uuid, kind, catalog_uuid) values (:t::uuid,:p::uuid,:r::uuid,'track',:c::uuid) on conflict (project_uuid, role_uuid, kind, catalog_uuid) do nothing`, { t: tenantId, p: projectId, r: id, c });
+      for (const c of junctures) await qx(`insert into role_template (tenant_id, project_uuid, role_uuid, kind, catalog_uuid) values (:t::uuid,:p::uuid,:r::uuid,'juncture',:c::uuid) on conflict (project_uuid, role_uuid, kind, catalog_uuid) do nothing`, { t: tenantId, p: projectId, r: id, c });
+    });
+    return json(200, { ok: true });
+  }
+  return json(405, { error: 'Method not allowed' });
+}
+
+// Project-scope SQL fragment for a column. Returns a clause beginning with
+// "and …" (or '' for a super admin, '1=0' guard for an admin with no projects).
+function projIn(col, allowed, prefix) {
+  if (allowed === null) return { clause: '', params: {} };
+  if (!allowed.length) return { clause: 'and 1=0', params: {} };
+  const ph = allowed.map((_, i) => `:${prefix}${i}::uuid`).join(', ');
+  const params = {};
+  allowed.forEach((v, i) => { params[`${prefix}${i}`] = v; });
+  return { clause: `and ${col} in (${ph})`, params };
+}
+
+// ── GET /admin/stats — dashboard aggregates, scoped to the admin's projects ──
+async function statsHandler(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  // optional per-project filter (super admin viewing one project's analytics)
+  const qp = (event.queryStringParameters || {}).project_id;
+  if (qp) {
+    if (allowed !== null && !allowed.includes(qp)) return json(403, { error: 'Project outside your scope.' });
+    allowed = [qp];
+  }
+  const base = { t: tenantId };
+  const sp = projIn('s.project_uuid', allowed, 'sp');     // survey / survey_form via survey
+  const tp = projIn('pum.project_uuid', allowed, 'tp');   // tokens / mappings via project_user_mapping
+
+  const scalar = async (sql, params) => Number((await one(sql, params) || {}).n || 0);
+
+  const surveys = await scalar(`select count(*) n from surveys s where s.tenant_id = :t::uuid ${sp.clause}`, { ...base, ...sp.params });
+  const sent = await scalar(`select count(*) n from survey_token st join project_user_mapping pum on pum.id = st.project_user_mapping_uuid where st.tenant_id = :t::uuid ${tp.clause}`, { ...base, ...tp.params });
+  const used = await scalar(`select count(*) n from survey_token st join project_user_mapping pum on pum.id = st.project_user_mapping_uuid where st.tenant_id = :t::uuid and st.used_at is not null ${tp.clause}`, { ...base, ...tp.params });
+  const responses = await scalar(`select count(*) n from survey_form sf join surveys s on s.id = sf.survey_uuid where sf.tenant_id = :t::uuid ${sp.clause}`, { ...base, ...sp.params });
+
+  let projects, users;
+  if (allowed === null) {
+    projects = await scalar(`select count(*) n from projects`, {});
+    users = await scalar(`select count(*) n from users where tenant_id = :t::uuid`, base);
+  } else {
+    projects = allowed.length;
+    users = await scalar(`select count(distinct user_uuid) n from project_user_mapping pum where pum.tenant_id = :t::uuid ${tp.clause}`, { ...base, ...tp.params });
+  }
+  const responseRate = sent ? Math.round((used / sent) * 100) : 0;
+
+  const series = await rows(
+    `select to_char(sf.submitted_at::date,'YYYY-MM-DD') d, count(*) c
+       from survey_form sf join surveys s on s.id = sf.survey_uuid
+      where sf.tenant_id = :t::uuid and sf.submitted_at >= now() - interval '14 days' ${sp.clause}
+      group by 1 order by 1`, { ...base, ...sp.params });
+  const byProject = await rows(
+    `select coalesce(p.project_details,'(none)') name, count(*) c
+       from survey_form sf join surveys s on s.id = sf.survey_uuid
+       left join projects p on p.id = s.project_uuid
+      where sf.tenant_id = :t::uuid ${sp.clause} group by 1 order by c desc limit 8`, { ...base, ...sp.params });
+  const byJuncture = await rows(
+    `select coalesce(j.juncture_name,'(untagged)') name, count(*) c
+       from survey_form sf join surveys s on s.id = sf.survey_uuid
+       left join project_priority_juncture_mapping m on m.id = sf.project_priority_juncture_mapping_uuid
+       left join project_priority_junctures j on j.id = m.project_junctures_uuid
+      where sf.tenant_id = :t::uuid ${sp.clause} group by 1 order by c desc limit 8`, { ...base, ...sp.params });
+
+  return json(200, { counts: { users, projects, surveys, sent, used, responses, responseRate }, series, byProject, byJuncture });
+}
+
+// ── GET /admin/query — filtered submissions explorer (safe, parameterized) ──
+async function queryHandler(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  const q = event.queryStringParameters || {};
+  const params = { t: tenantId };
+  const where = ['sf.tenant_id = :t::uuid'];
+
+  const sp = projIn('s.project_uuid', allowed, 'sp');
+  if (sp.clause) { where.push(sp.clause.replace(/^and /, '')); Object.assign(params, sp.params); }
+  if (q.project_id) { where.push('s.project_uuid = :pid::uuid'); params.pid = q.project_id; }
+  if (q.feedback_type) { where.push('s.feedback_type = :ft::survey_feedback_type'); params.ft = q.feedback_type; }
+  if (q.juncture) { where.push('jn.juncture_name = :jn'); params.jn = q.juncture; }
+  if (q.from) { where.push('sf.submitted_at >= :from::timestamptz'); params.from = q.from; }
+  if (q.to) { where.push('sf.submitted_at <= :to::timestamptz'); params.to = q.to; }
+  if (q.q) { where.push('sf.description ilike :search'); params.search = `%${q.q}%`; }
+  const lim = Math.min(Number(q.limit) || 200, 1000);
+
+  const out = await rows(
+    `select sf.submitted_at, sf.description, s.feedback_type,
+            u.email, u.fname, u.lname, p.project_details,
+            jn.juncture_name as juncture, ph.phase_name as phase, tr.track_name as track
+       from survey_form sf
+       join surveys s on s.id = sf.survey_uuid
+       left join project_user_mapping pum on pum.id = sf.project_user_mapping_uuid
+       left join users u on u.id = pum.user_uuid
+       left join projects p on p.id = s.project_uuid
+       left join project_priority_juncture_mapping jm on jm.id = sf.project_priority_juncture_mapping_uuid
+       left join project_priority_junctures jn on jn.id = jm.project_junctures_uuid
+       left join project_phase_mapping phm on phm.id = sf.project_phase_mapping_uuid
+       left join project_phases ph on ph.id = phm.project_phases_uuid
+       left join project_track_mapping tm on tm.id = sf.project_track_mapping_uuid
+       left join project_tracks tr on tr.id = tm.project_tracks_uuid
+      where ${where.join(' and ')}
+      order by sf.submitted_at desc limit ${lim}`, params);
+
+  return json(200, { rows: out });
+}
+
+// ── CSV export of submissions (scoped to a tenant admin's projects) ─────────
+const csvCell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+
+async function exportCsv(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+
+  const params = { tenant_id: tenantId };
+  let projFilter = '';
+  if (allowed !== null) {
+    if (!allowed.length) return csv('tower5-submissions.csv', '');
+    const ph = allowed.map((_, i) => `:sp${i}::uuid`).join(', ');
+    allowed.forEach((v, i) => { params[`sp${i}`] = v; });
+    projFilter = `and s.project_uuid in (${ph})`;
+  }
+
+  const recs = await rows(
+    `select sf.submitted_at, sf.description,
+            s.title as survey_title, s.feedback_type,
+            u.email, u.fname, u.lname,
+            p.project_details,
+            (select count(*) from digital_assets da where da.survey_form_uuid = sf.id) as asset_count
+       from survey_form sf
+       join surveys s                 on s.id = sf.survey_uuid
+       left join project_user_mapping pum on pum.id = sf.project_user_mapping_uuid
+       left join users u              on u.id = pum.user_uuid
+       left join projects p           on p.id = s.project_uuid
+      where sf.tenant_id = :tenant_id::uuid ${projFilter}
+      order by sf.submitted_at desc`,
+    params
+  );
+
+  const header = ['submitted_at', 'email', 'name', 'project', 'survey_title', 'feedback_type', 'description', 'asset_count'];
+  const lines = [header.map(csvCell).join(',')];
+  for (const r of recs) {
+    lines.push([
+      r.submitted_at, r.email, `${r.fname || ''} ${r.lname || ''}`.trim(),
+      r.project_details, r.survey_title, r.feedback_type, r.description, r.asset_count,
+    ].map(csvCell).join(','));
+  }
+  return csv(`tower5-submissions-${new Date().toISOString().slice(0, 10)}.csv`, lines.join('\n'));
 }

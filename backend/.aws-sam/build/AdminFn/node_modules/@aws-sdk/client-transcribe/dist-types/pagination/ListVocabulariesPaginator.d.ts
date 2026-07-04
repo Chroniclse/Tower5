@@ -1,0 +1,7 @@
+import type { Paginator } from "@smithy/types";
+import { ListVocabulariesCommandInput, ListVocabulariesCommandOutput } from "../commands/ListVocabulariesCommand";
+import type { TranscribePaginationConfiguration } from "./Interfaces";
+/**
+ * @public
+ */
+export declare const paginateListVocabularies: (config: TranscribePaginationConfiguration, input: ListVocabulariesCommandInput, ...rest: any[]) => Paginator<ListVocabulariesCommandOutput>;

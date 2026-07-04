@@ -7,6 +7,6 @@ architecture = "arm64"
 handler = "public/handler.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["MigrateFn", "PublicFn", "AdminFn", "ScheduledDispatchFn"]
+functions = ["MigrateFn", "EmployeeFn", "AdminFn", "SchedulerFn", "ProcessingFn", "NotificationFn"]
 
 [layer_build_definitions]

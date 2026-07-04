@@ -2,6 +2,14 @@
   "name": "nett-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "NETT work-around backend Lambdas. AWS SDK v3 is provided by the nodejs24.x runtime, so there are no runtime dependencies to install.",
-  "type": "commonjs"
+  "description": "Tower5 backend Lambdas. Most of AWS SDK v3 is provided by the nodejs24.x runtime; the S3 presigner and pg (Postgres driver, for in-VPC direct DB access) are bundled here.",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "@aws-sdk/client-transcribe": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "pg": "^8.13.0"
+  }
 }

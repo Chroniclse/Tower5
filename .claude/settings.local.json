@@ -8,7 +8,15 @@
       "Bash(node -e ' *)",
       "Bash(node --check /tmp/form_check.js)",
       "Read(//opt/homebrew/Cellar/awscli/2.35.11/libexec/bin/**)",
-      "Bash(zsh -lic 'which aws; which sam; aws --version')"
+      "Bash(zsh -lic 'which aws; which sam; aws --version')",
+      "Bash(node --check src/scheduler/handler.js)",
+      "Bash(python3 -c ' *)",
+      "Bash(node --check /tmp/a.js)",
+      "Bash(node --check backend/src/admin/handler.js)",
+      "Bash(python3 -c 'import re;open\\(\"/tmp/f.js\",\"w\"\\).write\\(re.search\\(r\"<script>\\(.*\\)</script>\",open\\(\"nett-form.html\"\\).read\\(\\),re.S\\).group\\(1\\)\\)')",
+      "Bash(node --check /tmp/f.js)",
+      "Bash(node --check src/employee/handler.js)",
+      "Bash(node --check src/admin/handler.js)"
     ]
   }
 }

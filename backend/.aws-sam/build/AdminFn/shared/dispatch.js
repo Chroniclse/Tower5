@@ -1,108 +1,75 @@
-// Core dispatch logic shared by the admin endpoint and the scheduled trigger.
-// Picks the audience, issues a magic link per member, and sends email/SMS.
-const { randomUUID } = require('crypto');
-const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
-const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
-const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
-const { doc, TABLES } = require('./db');
+// Dispatch orchestration, shared by the Admin endpoint and the Scheduler.
+// Owns the RDS work — pick the audience, issue a magic-link token per
+// project-user, build each personal link — then hands the resolved message
+// batch to the Notification service via an async Lambda invoke. It does NOT
+// send email/SMS itself; that's the Notification service's job.
+const { rows } = require('./sql');
 const { issueToken } = require('./tokens');
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 
-const ses = new SESClient({});
-const sns = new SNSClient({});
-
-const FROM_EMAIL = process.env.FROM_EMAIL;
+const lambda = new LambdaClient({});
+const NOTIFICATION_FN = process.env.NOTIFICATION_FN;
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
 
-async function listMembers() {
-  const { Items = [] } = await doc.send(new ScanCommand({ TableName: TABLES.members }));
-  return Items;
-}
-
-// memberIds that already submitted today (UTC day). Used for the morning follow-up.
-async function respondedTodayIds() {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const { Items = [] } = await doc.send(new ScanCommand({
-    TableName: TABLES.responses,
-    FilterExpression: 'begins_with(submittedAt, :d)',
-    ExpressionAttributeValues: { ':d': today },
-    ProjectionExpression: 'memberId',
-  }));
-  return new Set(Items.map((i) => i.memberId));
-}
-
-// audience: 'all' | 'nonresponders' | a role string (e.g. 'Director')
-async function pickAudience(audience) {
-  const members = (await listMembers()).filter((m) => m.status !== 'paused');
-  if (audience === 'all' || !audience) return members;
+// audience: 'all' | 'nonresponders'
+async function pickRecipients({ tenantId, projectId, audience }) {
+  const params = { tenant_id: tenantId };
+  let sql = `
+    select pum.id as pum_id, pum.tenant_id, u.email, u.fname, u.lname, u.phone
+    from project_user_mapping pum
+    join users u on u.id = pum.user_uuid
+    where pum.tenant_id = :tenant_id::uuid`;
+  if (projectId) {
+    sql += ` and pum.project_uuid = :project_id::uuid`;
+    params.project_id = projectId;
+  }
   if (audience === 'nonresponders') {
-    const done = await respondedTodayIds();
-    return members.filter((m) => !done.has(m.memberId));
+    sql += `
+      and pum.id not in (
+        select uphm.project_user_mapping_uuid
+        from user_phase_mapping uphm
+        join surveys s      on s.user_phase_mapping_uuid = uphm.id
+        join survey_form sf on sf.survey_uuid = s.id
+        where sf.submitted_at::date = now()::date)`;
   }
-  return members.filter((m) => m.role === audience);
+  return rows(sql, params);
 }
 
-function emailBody(member, link, note) {
-  const hi = member.fname ? `Hi ${member.fname},` : 'Hi,';
-  const extra = note ? `\n${note}\n` : '';
+// Resolve recipients + tokens, then queue them with the Notification service.
+async function dispatch({ tenantId, projectId, audience = 'all', channel = 'both', note = '', reason = 'admin' } = {}) {
+  if (!tenantId) throw new Error('dispatch requires a tenantId');
+
+  const recipients = await pickRecipients({ tenantId, projectId, audience });
+
+  const messages = [];
+  for (const r of recipients) {
+    const token = await issueToken(r.pum_id, r.tenant_id);
+    messages.push({
+      email: r.email,
+      phone: r.phone,
+      fname: r.fname,
+      lname: r.lname,
+      link: `${APP_BASE_URL}/nett-form.html?t=${token}`,
+    });
+  }
+
+  let queued = 0;
+  if (messages.length && NOTIFICATION_FN) {
+    await lambda.send(new InvokeCommand({
+      FunctionName: NOTIFICATION_FN,
+      InvocationType: 'Event', // async — fire and forget; Notification does the sending
+      Payload: Buffer.from(JSON.stringify({ channel, note, reason, messages })),
+    }));
+    queued = messages.length;
+  }
+
   return {
-    text: `${hi}\n${extra}\nTime for your NETT activity report. It takes 2–5 minutes.\n\nOpen your form: ${link}\n\nThis link is personal to you and expires soon.\n\n— Tower5 / NETT`,
-    html: `<p>${hi}</p>${note ? `<p>${note}</p>` : ''}<p>Time for your NETT activity report. It takes 2–5 minutes.</p>
-<p><a href="${link}" style="background:#c0392b;color:#fff;padding:12px 22px;border-radius:4px;text-decoration:none;font-weight:bold;letter-spacing:.06em">OPEN YOUR FORM</a></p>
-<p style="color:#777;font-size:12px">This link is personal to you and expires soon.</p><p style="color:#777;font-size:12px">— Tower5 / NETT</p>`,
-  };
-}
-
-async function sendToMember(member, channel, note, dispatchId) {
-  const token = await issueToken(member.memberId, dispatchId);
-  const link = `${APP_BASE_URL}/nett-form.html?t=${token}`;
-  const result = { memberId: member.memberId, name: `${member.fname} ${member.lname}`, sent: [], errors: [] };
-
-  if ((channel === 'both' || channel === 'email') && member.email) {
-    try {
-      const b = emailBody(member, link, note);
-      await ses.send(new SendEmailCommand({
-        Source: FROM_EMAIL,
-        Destination: { ToAddresses: [member.email] },
-        Message: {
-          Subject: { Data: 'NETT — your daily activity report' },
-          Body: { Text: { Data: b.text }, Html: { Data: b.html } },
-        },
-      }));
-      result.sent.push('email');
-    } catch (e) { result.errors.push(`email: ${e.message}`); }
-  }
-
-  if ((channel === 'both' || channel === 'sms') && member.phone) {
-    try {
-      await sns.send(new PublishCommand({
-        PhoneNumber: member.phone,
-        Message: `NETT activity report — takes 2–5 min: ${link}`,
-      }));
-      result.sent.push('sms');
-    } catch (e) { result.errors.push(`sms: ${e.message}`); }
-  }
-
-  return result;
-}
-
-// Main entry: send forms to an audience over a channel.
-async function dispatch({ audience = 'all', channel = 'both', note = '' } = {}) {
-  const dispatchId = randomUUID();
-  const recipients = await pickAudience(audience);
-  const results = [];
-  for (const m of recipients) {
-    results.push(await sendToMember(m, channel, note, dispatchId));
-  }
-  const sentCount = results.filter((r) => r.sent.length > 0).length;
-  return {
-    dispatchId,
+    tenantId,
+    projectId: projectId || null,
     audience,
     channel,
     recipients: recipients.length,
-    sent: sentCount,
-    failed: results.filter((r) => r.errors.length > 0).length,
-    at: new Date().toISOString(),
-    results,
+    queued,
   };
 }
 

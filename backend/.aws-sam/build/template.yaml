@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: "NETT Work Around \u2014 backend for Tower5. Magic-link activity-report\
-  \ forms, role-configurable dropdowns, twice-daily email/SMS dispatch, DynamoDB storage,\
-  \ and CSV export.\n"
+  \ forms, role-configurable dropdowns, twice-daily email/SMS dispatch, Aurora (PostgreSQL)\
+  \ storage, and CSV export.\n"
 Parameters:
   FromEmail:
     Type: String
@@ -42,14 +42,6 @@ Globals:
     MemorySize: 256
     Environment:
       Variables:
-        MEMBERS_TABLE:
-          Ref: MembersTable
-        CONFIG_TABLE:
-          Ref: ConfigTable
-        TOKENS_TABLE:
-          Ref: TokensTable
-        RESPONSES_TABLE:
-          Ref: ResponsesTable
         FROM_EMAIL:
           Ref: FromEmail
         TOKEN_TTL_HOURS:
@@ -70,53 +62,6 @@ Conditions:
       - Ref: AppBaseUrl
       - ''
 Resources:
-  MembersTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-      - AttributeName: memberId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: memberId
-        KeyType: HASH
-  ConfigTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-      - AttributeName: configKey
-        AttributeType: S
-      KeySchema:
-      - AttributeName: configKey
-        KeyType: HASH
-  TokensTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-      - AttributeName: token
-        AttributeType: S
-      KeySchema:
-      - AttributeName: token
-        KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: expiresAt
-        Enabled: true
-  ResponsesTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-      - AttributeName: memberId
-        AttributeType: S
-      - AttributeName: submittedAt
-        AttributeType: S
-      KeySchema:
-      - AttributeName: memberId
-        KeyType: HASH
-      - AttributeName: submittedAt
-        KeyType: RANGE
   DbVpc:
     Type: AWS::EC2::VPC
     Properties:
@@ -218,6 +163,52 @@ Resources:
         - Arn
       SchemaVersion:
         Ref: SchemaVersion
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName:
+        Fn::Sub: ${AWS::StackName}-admins
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      MfaConfiguration: 'OFF'
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+      - Name: tenant_id
+        AttributeDataType: String
+        Mutable: true
+        StringAttributeConstraints:
+          MaxLength: '64'
+      - Name: role
+        AttributeDataType: String
+        Mutable: true
+        StringAttributeConstraints:
+          MaxLength: '32'
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId:
+        Ref: UserPool
+      ClientName:
+        Fn::Sub: ${AWS::StackName}-admin-client
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_USER_PASSWORD_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
   Api:
     Type: AWS::Serverless::Api
     Properties:
@@ -225,30 +216,31 @@ Resources:
         Ref: Stage
       Cors:
         AllowMethods: '''GET,POST,DELETE,OPTIONS'''
-        AllowHeaders: '''Content-Type,x-api-key'''
+        AllowHeaders: '''Content-Type,Authorization,x-tenant-id'''
         AllowOrigin: '''*'''
       Auth:
-        ApiKeyRequired: false
-        UsagePlan:
-          CreateUsagePlan: PER_API
-  PublicFn:
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn:
+              Fn::GetAtt:
+              - UserPool
+              - Arn
+  EmployeeFn:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: public/handler.handler
-      CodeUri: PublicFn
+      Handler: employee/handler.handler
+      CodeUri: EmployeeFn
+      Environment:
+        Variables:
+          UPLOADS_BUCKET:
+            Ref: UploadsBucket
+          UPLOADS_KMS_KEY_ID:
+            Fn::GetAtt:
+            - UploadsKey
+            - Arn
+          PROCESSING_FN:
+            Ref: ProcessingFn
       Policies:
-      - DynamoDBReadPolicy:
-          TableName:
-            Ref: MembersTable
-      - DynamoDBReadPolicy:
-          TableName:
-            Ref: ConfigTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: TokensTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: ResponsesTable
       - Statement:
         - Effect: Allow
           Action:
@@ -267,6 +259,33 @@ Resources:
             Fn::GetAtt:
             - DbCluster
             - MasterUserSecret.SecretArn
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:GetObject
+          - s3:DeleteObject
+          Resource:
+            Fn::Sub: ${UploadsBucket.Arn}/*
+        - Effect: Allow
+          Action:
+          - kms:GenerateDataKey
+          - kms:Decrypt
+          Resource:
+            Fn::GetAtt:
+            - UploadsKey
+            - Arn
+        - Effect: Allow
+          Action:
+          - transcribe:StartTranscriptionJob
+          - transcribe:GetTranscriptionJob
+          - transcribe:DeleteTranscriptionJob
+          Resource: '*'
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource:
+            Fn::GetAtt:
+            - ProcessingFn
+            - Arn
       Events:
         GetForm:
           Type: Api
@@ -282,8 +301,22 @@ Resources:
               Ref: Api
             Path: /submit
             Method: post
+        UploadUrl:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /upload-url
+            Method: post
+        Transcribe:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /transcribe
+            Method: any
     Metadata:
-      SamResourceId: PublicFn
+      SamResourceId: EmployeeFn
   AdminFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -295,28 +328,18 @@ Resources:
             - HasAppBaseUrl
             - Ref: AppBaseUrl
             - Fn::Sub: https://${SiteDistribution.DomainName}
+          NOTIFICATION_FN:
+            Ref: NotificationFn
+          USER_POOL_ID:
+            Ref: UserPool
       Policies:
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: MembersTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: ConfigTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: TokensTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: ResponsesTable
       - Statement:
         - Effect: Allow
-          Action:
-          - ses:SendEmail
-          Resource: '*'
-        - Effect: Allow
-          Action:
-          - sns:Publish
-          Resource: '*'
+          Action: lambda:InvokeFunction
+          Resource:
+            Fn::GetAtt:
+            - NotificationFn
+            - Arn
         - Effect: Allow
           Action:
           - rds-data:ExecuteStatement
@@ -334,60 +357,33 @@ Resources:
             Fn::GetAtt:
             - DbCluster
             - MasterUserSecret.SecretArn
+        - Effect: Allow
+          Action:
+          - cognito-idp:AdminCreateUser
+          - cognito-idp:AdminSetUserPassword
+          - cognito-idp:AdminDeleteUser
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
       CodeUri: AdminFn
       Events:
-        Members:
+        AdminProxy:
           Type: Api
           Properties:
             RestApiId:
               Ref: Api
-            Path: /admin/members
+            Path: /admin/{proxy+}
             Method: any
             Auth:
-              ApiKeyRequired: true
-        Member:
-          Type: Api
-          Properties:
-            RestApiId:
-              Ref: Api
-            Path: /admin/members/{id}
-            Method: any
-            Auth:
-              ApiKeyRequired: true
-        Config:
-          Type: Api
-          Properties:
-            RestApiId:
-              Ref: Api
-            Path: /admin/config
-            Method: any
-            Auth:
-              ApiKeyRequired: true
-        Dispatch:
-          Type: Api
-          Properties:
-            RestApiId:
-              Ref: Api
-            Path: /admin/dispatch
-            Method: post
-            Auth:
-              ApiKeyRequired: true
-        Export:
-          Type: Api
-          Properties:
-            RestApiId:
-              Ref: Api
-            Path: /admin/export
-            Method: get
-            Auth:
-              ApiKeyRequired: true
+              Authorizer: CognitoAuth
     Metadata:
       SamResourceId: AdminFn
-  ScheduledDispatchFn:
+  SchedulerFn:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: scheduled/handler.handler
-      CodeUri: ScheduledDispatchFn
+      Handler: scheduler/handler.handler
+      CodeUri: SchedulerFn
       Environment:
         Variables:
           APP_BASE_URL:
@@ -395,25 +391,18 @@ Resources:
             - HasAppBaseUrl
             - Ref: AppBaseUrl
             - Fn::Sub: https://${SiteDistribution.DomainName}
+          NOTIFICATION_FN:
+            Ref: NotificationFn
+          SCHEDULE_TZ: America/Los_Angeles
+          SCHEDULE_INTERVAL_MIN: '15'
       Policies:
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: MembersTable
-      - DynamoDBCrudPolicy:
-          TableName:
-            Ref: TokensTable
-      - DynamoDBReadPolicy:
-          TableName:
-            Ref: ResponsesTable
       - Statement:
         - Effect: Allow
-          Action:
-          - ses:SendEmail
-          Resource: '*'
-        - Effect: Allow
-          Action:
-          - sns:Publish
-          Resource: '*'
+          Action: lambda:InvokeFunction
+          Resource:
+            Fn::GetAtt:
+            - NotificationFn
+            - Arn
         - Effect: Allow
           Action:
           - rds-data:ExecuteStatement
@@ -432,18 +421,139 @@ Resources:
             - DbCluster
             - MasterUserSecret.SecretArn
       Events:
-        EndOfDay:
+        Tick:
           Type: Schedule
           Properties:
-            Schedule: cron(0 23 * * ? *)
-            Input: '{"audience":"all","reason":"eod"}'
-        MorningFollowup:
-          Type: Schedule
-          Properties:
-            Schedule: cron(30 15 * * ? *)
-            Input: '{"audience":"nonresponders","reason":"morning"}'
+            Schedule: rate(15 minutes)
     Metadata:
-      SamResourceId: ScheduledDispatchFn
+      SamResourceId: SchedulerFn
+  ProcessingFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: processing/handler.handler
+      CodeUri: ProcessingFn
+      Timeout: 60
+      Environment:
+        Variables:
+          UPLOADS_BUCKET:
+            Ref: UploadsBucket
+          UPLOADS_KMS_KEY_ID:
+            Fn::GetAtt:
+            - UploadsKey
+            - Arn
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - rds-data:ExecuteStatement
+          - rds-data:BatchExecuteStatement
+          - rds-data:BeginTransaction
+          - rds-data:CommitTransaction
+          - rds-data:RollbackTransaction
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - DBClusterArn
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource:
+            Fn::GetAtt:
+            - DbCluster
+            - MasterUserSecret.SecretArn
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          Resource:
+            Fn::Sub: ${UploadsBucket.Arn}/*
+        - Effect: Allow
+          Action:
+          - kms:Decrypt
+          - kms:GenerateDataKey
+          Resource:
+            Fn::GetAtt:
+            - UploadsKey
+            - Arn
+        - Effect: Allow
+          Action:
+          - transcribe:StartTranscriptionJob
+          - transcribe:GetTranscriptionJob
+          Resource: '*'
+      Events:
+        TranscribeDone:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+              - aws.transcribe
+              detail-type:
+              - Transcribe Job State Change
+              detail:
+                TranscriptionJobStatus:
+                - COMPLETED
+                - FAILED
+    Metadata:
+      SamResourceId: ProcessingFn
+  NotificationFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: notification/handler.handler
+      CodeUri: NotificationFn
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - ses:SendEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+          - sns:Publish
+          Resource: '*'
+    Metadata:
+      SamResourceId: NotificationFn
+  UploadsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Tower5 uploads-bucket encryption key
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AllowAccountAdmin
+          Effect: Allow
+          Principal:
+            AWS:
+              Fn::Sub: arn:aws:iam::${AWS::AccountId}:root
+          Action: kms:*
+          Resource: '*'
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: aws:kms
+            KMSMasterKeyID:
+              Fn::GetAtt:
+              - UploadsKey
+              - Arn
+      CorsConfiguration:
+        CorsRules:
+        - AllowedMethods:
+          - PUT
+          AllowedOrigins:
+          - '*'
+          AllowedHeaders:
+          - '*'
+          MaxAge: 3000
   SiteBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -460,7 +570,7 @@ Resources:
     Properties:
       OriginAccessControlConfig:
         Name:
-          Fn::Sub: ${AWS::StackName}-site-oac
+          Fn::Sub: ${AWS::StackName}-${AWS::Region}-site-oac
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
@@ -525,11 +635,14 @@ Outputs:
     Description: Upload the HTML files here (aws s3 cp nett-form.html s3://<this>/).
     Value:
       Ref: SiteBucket
-  ApiKeyId:
-    Description: Run `aws apigateway get-api-key --api-key <this id> --include-value`
-      to get the admin key.
+  UserPoolId:
+    Description: Cognito User Pool id (for `aws cognito-idp admin-create-user`, etc.).
     Value:
-      Ref: ApiApiKey
+      Ref: UserPool
+  UserPoolClientId:
+    Description: Cognito app client id (for `initiate-auth` to get a JWT).
+    Value:
+      Ref: UserPoolClient
   DbClusterArn:
     Description: Aurora cluster ARN. Pass as --resource-arn to `aws rds-data execute-statement`.
     Value:

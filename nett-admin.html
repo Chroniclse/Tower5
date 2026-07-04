@@ -3,1100 +3,652 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NETT — Admin Panel</title>
+<title>Tower5 — Admin Panel</title>
 <style>
   :root {
-    --black: #1a1a1a;
-    --charcoal: #2e2e2e;
-    --mid: #444444;
-    --gray: #6b6b6b;
-    --light: #a8a8a8;
-    --border: #333333;
-    --surface: #242424;
-    --surface2: #2a2a2a;
-    --red: #c0392b;
-    --red-hover: #a93226;
-    --red-muted: rgba(192,57,43,0.12);
-    --white: #f0f0f0;
-    --white-dim: #b0b0b0;
-    --success: #27ae60;
-    --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --red:#c0392b; --red-dark:#a93226; --red-muted:#fdecea; --red-border:#f3c4be;
+    --black:#1a1a1a; --ink:#1f1f1f; --mid:#444; --gray:#777; --light:#999;
+    --line:#e3e3e3; --line2:#ededed; --bg:#f4f4f5; --surface:#fff; --surface2:#f7f7f7;
+    --green:#27ae60; --orange:#e67e22; --font:'Helvetica Neue',Helvetica,Arial,sans-serif;
   }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font); font-size:14px; min-height:100vh; }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .site-header { background:var(--red); display:flex; align-items:center; justify-content:space-between; padding:0 32px; height:84px; }
+  .brand { display:flex; align-items:center; gap:18px; }
+  .brand .logo { font-size:26px; font-weight:900; letter-spacing:0.06em; color:#fff; }
+  .brand .divider { width:1px; height:30px; background:rgba(255,255,255,0.4); }
+  .brand .sub { font-size:15px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:rgba(255,255,255,0.85); }
+  .header-right { display:flex; align-items:center; gap:16px; color:rgba(255,255,255,0.9); font-size:13px; }
+  .role-pill { font-size:10px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.35); border-radius:20px; padding:3px 10px; color:#fff; }
+  .header-right .out { background:rgba(0,0,0,0.18); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:4px; padding:6px 12px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
+  .header-right .out:hover { background:rgba(0,0,0,0.3); }
 
-  body {
-    background: var(--black);
-    color: var(--white);
-    font-family: var(--font);
-    font-size: 14px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+  .tabbar { background:var(--black); display:flex; padding:0 32px; height:52px; }
+  .tab { display:flex; align-items:center; padding:0 20px; font-size:13px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#8a8a8a; cursor:pointer; border-bottom:3px solid transparent; user-select:none; }
+  .tab:hover { color:#ccc; } .tab.active { color:#fff; border-bottom-color:var(--red); }
 
-  /* NAV */
-  nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 32px;
-    height: 56px;
-    background: var(--black);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-  .logo {
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    color: var(--white);
-    text-transform: uppercase;
-  }
-  .logo span { color: var(--red); }
-  .nav-tabs {
-    display: flex;
-    gap: 0;
-    height: 100%;
-  }
-  .nav-tab {
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--gray);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-    user-select: none;
-  }
-  .nav-tab:hover { color: var(--white-dim); }
-  .nav-tab.active { color: var(--white); border-bottom-color: var(--red); }
-  .nav-right {
-    font-size: 12px;
-    color: var(--gray);
-    letter-spacing: 0.05em;
-  }
+  .page { display:none; } .page.active { display:block; }
+  .page-header { background:var(--surface); padding:26px 32px 22px; border-bottom:2px solid var(--red); display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .page-header h1 { font-size:26px; font-weight:800; letter-spacing:0.01em; text-transform:uppercase; }
+  .page-header p { margin-top:6px; font-size:13px; color:var(--gray); }
+  .page-body { padding:28px 32px; }
 
-  /* LAYOUT */
-  .page { display: none; flex: 1; }
-  .page.active { display: flex; flex-direction: column; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:5px; margin-bottom:22px; overflow:hidden; }
+  .card-head { background:var(--surface2); border-bottom:1px solid var(--line); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; }
+  .card-head h3 { font-size:12px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--mid); }
+  .card-head .hint { font-size:12px; color:var(--light); }
+  .card-body { padding:20px; }
+  .grid-2 { display:grid; grid-template-columns:0.9fr 1.1fr; gap:22px; align-items:start; }
+  .grid-half { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; align-items:start; }
+  @media (max-width:880px){ .grid-2,.grid-half,.grid-3 { grid-template-columns:1fr; } }
 
-  .page-header {
-    padding: 28px 32px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-  .page-header h1 {
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--white);
-  }
-  .page-header p {
-    margin-top: 4px;
-    font-size: 13px;
-    color: var(--gray);
-  }
+  label { display:block; font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--mid); margin-bottom:8px; }
+  input, select, textarea { background:#fff; border:1px solid #ccc; border-radius:4px; color:var(--ink); font-family:var(--font); font-size:14px; padding:11px 13px; outline:none; width:100%; transition:border-color 0.15s,box-shadow 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color:var(--red); box-shadow:0 0 0 2px rgba(192,57,43,0.12); }
+  textarea { resize:vertical; min-height:90px; }
+  .field { margin-bottom:18px; } .field-row { display:flex; gap:14px; } .field-row .field { flex:1; }
+  .inline-add { display:flex; gap:10px; } .inline-add input, .inline-add select { flex:1; }
 
-  .page-body {
-    padding: 28px 32px;
-    flex: 1;
-  }
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:11px 20px; font-family:var(--font); font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; border:none; border-radius:4px; cursor:pointer; transition:background 0.15s,opacity 0.15s; }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn-primary { background:var(--red); color:#fff; } .btn-primary:hover { background:var(--red-dark); }
+  .btn-outline { background:#fff; color:var(--red); border:1px solid var(--red); } .btn-outline:hover { background:var(--red-muted); }
+  .btn-ghost { background:#fff; color:var(--gray); border:1px solid #ccc; } .btn-ghost:hover { color:var(--ink); border-color:#999; }
+  .btn-sm { padding:7px 13px; font-size:11px; }
 
-  /* CARDS */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 20px 24px;
-    margin-bottom: 20px;
-  }
-  .card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .card-title {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--white-dim);
-  }
+  table { width:100%; border-collapse:collapse; background:var(--surface); }
+  thead tr { background:var(--surface2); }
+  th { text-align:left; font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--gray); padding:14px 20px; border-bottom:1px solid var(--line); }
+  td { padding:16px 20px; font-size:14px; border-bottom:1px solid var(--line2); color:var(--mid); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .name-cell { font-weight:700; color:var(--ink); }
+  .badge { display:inline-block; background:var(--red-muted); border:1px solid var(--red-border); color:var(--red); border-radius:4px; padding:3px 9px; font-size:11px; font-weight:700; letter-spacing:0.04em; margin:2px; }
+  .chip { display:inline-block; background:#eef; border:1px solid #dde; color:#445; border-radius:4px; padding:3px 9px; font-size:11px; margin:2px; }
+  .empty { padding:30px; text-align:center; color:var(--gray); font-size:14px; }
+  .muted { color:var(--gray); }
+  .divider { border:none; border-top:1px solid var(--line); margin:20px 0; }
+  .sub { font-size:12px; color:var(--gray); margin:-2px 0 16px; line-height:1.6; }
 
-  /* BUTTONS */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    font-family: var(--font);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
-  }
-  .btn-primary { background: var(--red); color: #fff; }
-  .btn-primary:hover { background: var(--red-hover); }
-  .btn-ghost {
-    background: transparent;
-    color: var(--gray);
-    border: 1px solid var(--border);
-  }
-  .btn-ghost:hover { color: var(--white); border-color: var(--mid); }
-  .btn-sm { padding: 5px 10px; font-size: 11px; }
-  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
-  .btn-danger:hover { background: var(--red-muted); }
+  .tag-list { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:12px; }
+  .tag { display:inline-flex; align-items:center; gap:8px; background:#efefef; border:1px solid #e0e0e0; border-radius:4px; padding:7px 12px; font-size:13px; color:var(--mid); }
+  .tag-x { background:none; border:none; color:var(--light); cursor:pointer; font-size:15px; line-height:1; padding:0; } .tag-x:hover { color:var(--red); }
 
-  /* INPUTS */
-  input[type="text"], input[type="email"], select, textarea {
-    background: var(--charcoal);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--white);
-    font-family: var(--font);
-    font-size: 13px;
-    padding: 8px 12px;
-    outline: none;
-    transition: border-color 0.15s;
-    width: 100%;
-  }
-  input[type="text"]:focus,
-  input[type="email"]:focus,
-  select:focus,
-  textarea:focus {
-    border-color: var(--red);
-  }
-  select option { background: var(--charcoal); }
-  textarea { resize: vertical; min-height: 80px; }
-  label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--light);
-    margin-bottom: 6px;
-  }
-  .field { margin-bottom: 16px; }
-  .field-row { display: flex; gap: 12px; }
-  .field-row .field { flex: 1; }
+  .pick { display:flex; flex-wrap:wrap; gap:8px; }
+  .pick label { display:inline-flex; align-items:center; gap:7px; margin:0; background:#fff; border:1px solid #ccc; border-radius:20px; padding:7px 13px; font-size:12px; font-weight:600; letter-spacing:0; text-transform:none; color:var(--mid); cursor:pointer; }
+  .pick label:has(input:checked) { background:var(--red-muted); border-color:var(--red-border); color:var(--red); }
+  .pick input { width:auto; margin:0; accent-color:var(--red); }
 
-  /* TAGS */
-  .tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-  }
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 4px 10px;
-    font-size: 12px;
-    color: var(--white-dim);
-  }
-  .tag-remove {
-    background: none;
-    border: none;
-    color: var(--gray);
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    padding: 0;
-    transition: color 0.1s;
-  }
-  .tag-remove:hover { color: var(--red); }
+  .list-row { display:flex; align-items:center; justify-content:space-between; padding:13px 18px; border-bottom:1px solid var(--line2); cursor:pointer; }
+  .list-row:last-child { border-bottom:none; } .list-row:hover { background:var(--surface2); }
+  .list-row.sel { background:var(--red-muted); }
+  .list-row .nm { font-weight:700; color:var(--ink); }
 
-  /* TAG INPUT ROW */
-  .tag-input-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-  }
-  .tag-input-row input { flex: 1; }
+  .day-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .day { display:inline-flex; align-items:center; gap:7px; background:#fff; border:1px solid #ccc; border-radius:20px; padding:8px 14px; font-size:13px; color:var(--mid); cursor:pointer; }
+  .day input { width:auto; margin:0; accent-color:var(--red); }
+  .day:has(input:checked) { background:var(--red-muted); border-color:var(--red-border); color:var(--red); font-weight:700; }
 
-  /* TEAM TABLE */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  th {
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--gray);
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  td {
-    padding: 10px 12px;
-    font-size: 13px;
-    border-bottom: 1px solid var(--border);
-    color: var(--white-dim);
-    vertical-align: middle;
-  }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: var(--surface2); }
-  .role-badge {
-    display: inline-block;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--light);
-  }
-  .status-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    margin-right: 6px;
-  }
-  .status-active { background: var(--success); }
-  .status-pending { background: #e67e22; }
+  .stat-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:16px; margin-bottom:22px; }
+  @media (max-width:1000px){ .stat-grid { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:560px){ .stat-grid { grid-template-columns:repeat(2,1fr); } }
+  .stat-card { background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:18px 16px; }
+  .stat-val { font-size:30px; font-weight:800; color:var(--ink); line-height:1; }
+  .stat-key { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray); margin-top:8px; }
+  .barchart { display:flex; align-items:flex-end; gap:8px; height:160px; padding-top:8px; }
+  .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+  .bar { width:70%; min-height:2px; background:var(--red); border-radius:3px 3px 0 0; }
+  .bar-lbl { font-size:9px; color:var(--gray); margin-top:6px; white-space:nowrap; }
+  .hbar-row { display:flex; align-items:center; gap:12px; padding:7px 0; }
+  .hbar-lbl { width:38%; font-size:13px; color:var(--mid); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hbar-track { flex:1; background:var(--line2); border-radius:3px; height:14px; overflow:hidden; }
+  .hbar-fill { height:100%; background:var(--red); border-radius:3px; }
+  .hbar-val { width:36px; text-align:right; font-size:13px; font-weight:700; color:var(--ink); }
+  .q-filters { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:18px; }
+  @media (max-width:760px){ .q-filters { grid-template-columns:1fr 1fr; } }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+  .dot-green { background:var(--green); } .dot-orange { background:var(--orange); }
 
-  /* DISPATCH */
-  .dispatch-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-  .dispatch-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 20px;
-  }
-  .dispatch-card h3 {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--light);
-    margin-bottom: 12px;
-  }
-  .schedule-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-    color: var(--white-dim);
-  }
-  .schedule-row:last-child { border-bottom: none; }
-  .schedule-time {
-    font-weight: 600;
-    color: var(--white);
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.04em;
-  }
-  .schedule-label { color: var(--gray); font-size: 12px; }
-  .toggle-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--gray);
-  }
-  .toggle {
-    position: relative;
-    display: inline-block;
-    width: 34px;
-    height: 20px;
-  }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute;
-    inset: 0;
-    background: var(--mid);
-    border-radius: 20px;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .slider:before {
-    content: '';
-    position: absolute;
-    width: 14px;
-    height: 14px;
-    left: 3px;
-    top: 3px;
-    background: var(--white);
-    border-radius: 50%;
-    transition: transform 0.2s;
-  }
-  .toggle input:checked + .slider { background: var(--red); }
-  .toggle input:checked + .slider:before { transform: translateX(14px); }
+  #toast { position:fixed; bottom:28px; right:28px; background:var(--ink); color:#f0f0f0; border-left:3px solid var(--red); border-radius:4px; padding:13px 20px; font-size:13px; opacity:0; transform:translateY(8px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; z-index:999; max-width:360px; } #toast.show { opacity:1; transform:translateY(0); }
+  .modal-bd { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:200; align-items:center; justify-content:center; } .modal-bd.open { display:flex; }
+  .modal { background:#fff; border-radius:6px; width:460px; max-width:95vw; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .modal h2 { font-size:18px; font-weight:800; margin-bottom:22px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:24px; }
 
-  .dispatch-history {
-    margin-top: 8px;
-  }
-  .history-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--gray);
-  }
-  .history-row:last-child { border-bottom: none; }
-  .history-date { color: var(--white-dim); }
-  .history-stat { color: var(--light); }
-
-  /* TOAST */
-  #toast {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--red);
-    border-radius: 4px;
-    padding: 12px 20px;
-    font-size: 13px;
-    color: var(--white-dim);
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.2s, transform 0.2s;
-    pointer-events: none;
-    z-index: 999;
-  }
-  #toast.show { opacity: 1; transform: translateY(0); }
-
-  /* MODAL */
-  .modal-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 200;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-backdrop.open { display: flex; }
-  .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    width: 480px;
-    max-width: 95vw;
-    padding: 28px;
-  }
-  .modal h2 {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 20px;
-    color: var(--white);
-  }
-  .modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 24px;
-  }
-
-  /* ROLE SECTIONS */
-  .role-section {
-    margin-bottom: 24px;
-  }
-  .role-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 12px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .role-section-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--white);
-    letter-spacing: 0.04em;
-  }
-  .role-section-chevron {
-    font-size: 11px;
-    color: var(--gray);
-    transition: transform 0.2s;
-  }
-  .role-section.collapsed .role-section-chevron { transform: rotate(-90deg); }
-  .role-section.collapsed .role-section-body { display: none; }
-
-  .empty-state {
-    padding: 32px;
-    text-align: center;
-    color: var(--gray);
-    font-size: 13px;
-    border: 1px dashed var(--border);
-    border-radius: 4px;
-  }
-  .divider {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 24px 0;
-  }
+  .overlay { position:fixed; inset:0; background:var(--bg); z-index:500; display:flex; align-items:center; justify-content:center; } .overlay.hidden { display:none; }
+  .auth-box { width:400px; max-width:92vw; background:#fff; border:1px solid var(--line); border-radius:8px; padding:36px; box-shadow:0 10px 40px rgba(0,0,0,0.08); }
+  .auth-box .logo { font-size:28px; font-weight:900; letter-spacing:0.05em; color:var(--red); }
+  .auth-box .auth-sub { font-size:13px; color:var(--gray); margin:4px 0 26px; letter-spacing:0.04em; }
+  .auth-err { color:var(--red); font-size:12px; margin-top:12px; min-height:16px; }
+  .link-btn { background:none; border:none; color:var(--gray); font-size:12px; cursor:pointer; text-decoration:underline; padding:0; margin-top:18px; } .link-btn:hover { color:var(--ink); }
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="logo">TOWER<span>5</span> <span style="color:var(--gray);font-weight:400;font-size:13px;letter-spacing:0.04em;margin-left:10px;text-transform:none">NETT Admin</span></div>
-  <div class="nav-tabs">
-    <div class="nav-tab active" onclick="switchTab('dispatch')">Dispatch</div>
-    <div class="nav-tab" onclick="switchTab('team')">Team</div>
-    <div class="nav-tab" onclick="switchTab('config')">Form Config</div>
-  </div>
-  <div class="nav-right">
-    <span id="conn-status" title="Connection status">Preview mode</span>
-    <button class="btn btn-ghost btn-sm" style="margin-left:12px" onclick="openKeyModal()">Connection</button>
-  </div>
-</nav>
-
-<!-- ===================== DISPATCH PAGE ===================== -->
-<div class="page active" id="page-dispatch">
-  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-direction:row">
-    <div>
-      <h1>Dispatch</h1>
-      <p>Send forms to your team manually or manage the automatic schedule.</p>
+<!-- AUTH -->
+<div class="overlay" id="overlay">
+  <div class="auth-box">
+    <div class="logo">TOWER5</div>
+    <div class="auth-sub">ADMIN PANEL — SIGN IN</div>
+    <div id="login-view">
+      <div class="field"><label>Email</label><input type="email" id="login-email" placeholder="admin@acme.com" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" id="login-btn" onclick="doLogin()">Sign in</button>
+      <div class="auth-err" id="login-err"></div>
+      <button class="link-btn" onclick="showSettings()">Connection settings</button>
     </div>
-    <button class="btn btn-ghost" onclick="exportCsv()">⬇ Export responses (CSV)</button>
-  </div>
-  <div class="page-body">
-
-    <div class="dispatch-grid">
-
-      <!-- Manual dispatch -->
-      <div class="dispatch-card">
-        <h3>Send now</h3>
-        <div class="field">
-          <label>Recipients</label>
-          <select id="dispatch-target">
-            <option value="all">All team members</option>
-            <option value="nonresponders">Non-responders (today)</option>
-            <option value="Director">Directors only</option>
-            <option value="Editor">Editors only</option>
-            <option value="Producer">Producers only</option>
-            <option value="Legal / Compliance">Legal / Compliance only</option>
-            <option value="VFX / Tech">VFX / Tech only</option>
-            <option value="Knowledge Management">Knowledge Management only</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Channel</label>
-          <select id="dispatch-channel">
-            <option value="both">Email + SMS</option>
-            <option value="email">Email only</option>
-            <option value="sms">SMS only</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Custom message (optional)</label>
-          <textarea id="dispatch-note" placeholder="Add a note to the top of the reminder, e.g. 'Please focus on tool evaluations this week.'"></textarea>
-        </div>
-        <button class="btn btn-primary" onclick="sendDispatch()">Send forms now</button>
-      </div>
-
-      <!-- Schedule -->
-      <div style="display:flex;flex-direction:column;gap:20px;">
-        <div class="dispatch-card">
-          <h3>Automatic schedule</h3>
-          <p style="font-size:11px;color:var(--gray);margin:-4px 0 12px;line-height:1.5">Configured in AWS EventBridge — shown here for reference. Times are Pacific (PDT).</p>
-          <div class="schedule-row">
-            <div>
-              <div class="schedule-time">4:00 PM PT</div>
-              <div class="schedule-label">End-of-day reminder</div>
-            </div>
-            <div class="toggle-wrap">
-              <label class="toggle">
-                <input type="checkbox" checked onchange="toggleSchedule(this,'eod')">
-                <span class="slider"></span>
-              </label>
-              On
-            </div>
-          </div>
-          <div class="schedule-row">
-            <div>
-              <div class="schedule-time">8:30 AM PT</div>
-              <div class="schedule-label">Morning follow-up (non-responders)</div>
-            </div>
-            <div class="toggle-wrap">
-              <label class="toggle">
-                <input type="checkbox" checked onchange="toggleSchedule(this,'morning')">
-                <span class="slider"></span>
-              </label>
-              On
-            </div>
-          </div>
-        </div>
-
-        <div class="dispatch-card">
-          <h3>Recent dispatches</h3>
-          <p style="font-size:11px;color:var(--gray);margin:-4px 0 12px;line-height:1.5">Live send results appear as a toast. A persistent dispatch log isn't stored yet.</p>
-          <div class="dispatch-history">
-            <div class="history-row" style="border:none;color:var(--gray)">No dispatches recorded yet.</div>
-          </div>
-        </div>
-      </div>
-
+    <div id="settings-view" style="display:none">
+      <div class="field"><label>API base URL</label><input id="cfg-api" placeholder="https://xxxx.execute-api.us-east-2.amazonaws.com/prod"></div>
+      <div class="field"><label>Cognito App Client ID</label><input id="cfg-client" placeholder="UserPoolClientId"></div>
+      <div class="field"><label>AWS region</label><input id="cfg-region" placeholder="us-east-2"></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveSettings()">Save</button>
+      <button class="link-btn" onclick="showLogin()">Back to sign in</button>
     </div>
   </div>
 </div>
 
-<!-- ===================== TEAM PAGE ===================== -->
-<div class="page" id="page-team">
-  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-direction:row;padding:28px 32px 20px">
-    <div>
-      <h1>Team</h1>
-      <p>Manage who receives forms and their assigned role.</p>
-    </div>
-    <button class="btn btn-primary" onclick="openAddMember()">+ Add member</button>
+<!-- APP -->
+<div id="app" style="display:none">
+  <div class="site-header">
+    <div class="brand"><div class="logo">TOWER5</div><div class="divider"></div><div class="sub">Admin Panel</div></div>
+    <div class="header-right"><span id="who"></span><span class="role-pill" id="role-pill"></span><button class="out" onclick="logout()">Sign out</button></div>
   </div>
-  <div class="page-body">
-    <div class="card" style="padding:0;overflow:hidden;">
-      <table id="team-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="team-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+  <div class="tabbar" id="tabbar"></div>
 
-<!-- ===================== CONFIG PAGE ===================== -->
-<div class="page" id="page-config">
-  <div class="page-header">
-    <h1>Form config</h1>
-    <p>Configure the dropdown options available in each role's form. Changes apply to the next dispatch.</p>
-  </div>
-  <div class="page-body">
+  <!-- ===== SUPER ADMIN ===== -->
 
-    <!-- Global dropdowns -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Global options</span>
-        <span style="font-size:12px;color:var(--gray)">Available to all roles</span>
+  <!-- PROJECTS -->
+  <div class="page" id="page-projects">
+    <div class="page-header"><div><h1>Projects</h1><p><span id="proj-count">0</span> project(s). Select one to see its team and analytics.</p></div>
+      <button class="btn btn-primary" onclick="openModal('modal-project')">+ Add project</button></div>
+    <div class="page-body"><div class="grid-2">
+      <div class="card"><div class="card-head"><h3>All projects</h3></div><div id="proj-list"></div></div>
+      <div class="card"><div class="card-head"><h3 id="proj-sel-title">Team</h3>
+        <span><button class="btn btn-ghost btn-sm" id="proj-analytics" style="display:none" onclick="analyticsForSelected()">Analytics</button>
+        <button class="btn btn-outline btn-sm" id="proj-remove" style="display:none" onclick="rmSelectedProject()">Remove project</button></span></div>
+        <div class="card-body" id="proj-members"><div class="empty">Select a project.</div></div></div>
+    </div></div>
+  </div>
+
+  <!-- CATALOG -->
+  <div class="page" id="page-catalog">
+    <div class="page-header"><div><h1>Catalog</h1><p>Master lists. Tenant admins assign these to their users.</p></div></div>
+    <div class="page-body"><div class="card"><div class="card-body"><div class="grid-half">
+      <div><label>Phases</label><div id="tags-phases" class="tag-list"></div><div class="inline-add"><input id="in-phases" placeholder="Add phase…" onkeydown="if(event.key==='Enter')addCatalog('phases')"><button class="btn btn-ghost btn-sm" onclick="addCatalog('phases')">Add</button></div></div>
+      <div><label>Tracks</label><div id="tags-tracks" class="tag-list"></div><div class="inline-add"><input id="in-tracks" placeholder="Add track…" onkeydown="if(event.key==='Enter')addCatalog('tracks')"><button class="btn btn-ghost btn-sm" onclick="addCatalog('tracks')">Add</button></div></div>
+      <div><label>Technology junctures</label><div id="tags-junctures" class="tag-list"></div><div class="inline-add"><input id="in-junctures" placeholder="Add juncture…" onkeydown="if(event.key==='Enter')addCatalog('junctures')"><button class="btn btn-ghost btn-sm" onclick="addCatalog('junctures')">Add</button></div></div>
+      <div><label>Roles</label><div id="tags-roles" class="tag-list"></div><div class="inline-add"><input id="in-roles" placeholder="Add role…" onkeydown="if(event.key==='Enter')addCatalog('roles')"><button class="btn btn-ghost btn-sm" onclick="addCatalog('roles')">Add</button></div></div>
+    </div></div></div></div>
+  </div>
+
+  <!-- TENANTS -->
+  <div class="page" id="page-tenants">
+    <div class="page-header"><div><h1>Tenants</h1><p>Tenant-admin logins, each scoped to one project.</p></div>
+      <button class="btn btn-primary" onclick="openModal('modal-tenant')">+ Add tenant</button></div>
+    <div class="page-body"><div class="card">
+      <table><thead><tr><th>Email</th><th>Project</th><th></th></tr></thead><tbody id="tenants-tbody"></tbody></table>
+    </div></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="page" id="page-dashboard">
+    <div class="page-header"><div><h1>Dashboard</h1><p>Activity overview.</p></div>
+      <select id="dash-project" style="width:auto" onchange="loadDashboard()"></select></div>
+    <div class="page-body">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="card"><div class="card-head"><h3>Submissions — last 14 days</h3></div><div class="card-body"><div id="chart-series" class="barchart"></div></div></div>
+      <div class="grid-half">
+        <div class="card"><div class="card-head"><h3>By project</h3></div><div class="card-body" id="by-project"></div></div>
+        <div class="card"><div class="card-head"><h3>By Technology Juncture</h3></div><div class="card-body" id="by-juncture"></div></div>
       </div>
+    </div>
+  </div>
 
-      <div class="field">
-        <label>Phase options</label>
-        <div id="tags-phase" class="tag-list"></div>
-        <div class="tag-input-row">
-          <input type="text" id="input-phase" placeholder="Add phase…" onkeydown="handleTagKey(event,'phase')">
-          <button class="btn btn-ghost btn-sm" onclick="addTag('phase')">Add</button>
+  <!-- QUERIES -->
+  <div class="page" id="page-queries">
+    <div class="page-header"><div><h1>Queries</h1><p>Filter and export submitted responses.</p></div>
+      <button class="btn btn-ghost" onclick="exportQuery()">⬇ Export results</button></div>
+    <div class="page-body">
+      <div class="card"><div class="card-body">
+        <div class="q-filters">
+          <div class="field"><label>Project</label><select id="q-project"></select></div>
+          <div class="field"><label>Technology Juncture</label><select id="q-juncture"></select></div>
+          <div class="field"><label>Response type</label><select id="q-type"><option value="">Any</option><option value="text">Text</option><option value="audio">Audio</option></select></div>
+          <div class="field"><label>From</label><input type="date" id="q-from"></div>
+          <div class="field"><label>To</label><input type="date" id="q-to"></div>
+          <div class="field"><label>Search text</label><input id="q-search" placeholder="in description…"></div>
         </div>
-      </div>
-
-      <hr class="divider">
-
-      <div class="field">
-        <label>Track options</label>
-        <div id="tags-track" class="tag-list"></div>
-        <div class="tag-input-row">
-          <input type="text" id="input-track" placeholder="Add track…" onkeydown="handleTagKey(event,'track')">
-          <button class="btn btn-ghost btn-sm" onclick="addTag('track')">Add</button>
-        </div>
-      </div>
-
-      <hr class="divider">
-
-      <div class="field">
-        <label>Priority juncture options</label>
-        <div id="tags-priority" class="tag-list"></div>
-        <div class="tag-input-row">
-          <input type="text" id="input-priority" placeholder="Add juncture…" onkeydown="handleTagKey(event,'priority')">
-          <button class="btn btn-ghost btn-sm" onclick="addTag('priority')">Add</button>
-        </div>
-      </div>
+        <button class="btn btn-primary" onclick="runQuery()">Run query</button>
+        <span class="muted" id="q-count" style="margin-left:14px"></span>
+      </div></div>
+      <div class="card"><table><thead><tr><th>Submitted</th><th>User</th><th>Project</th><th>Juncture</th><th>Response</th></tr></thead><tbody id="q-tbody"><tr><td colspan="5" class="empty">Run a query to see results.</td></tr></tbody></table></div>
     </div>
+  </div>
 
-    <!-- Per-role overrides -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Role overrides</span>
-        <span style="font-size:12px;color:var(--gray)">Add options visible only to a specific role</span>
-      </div>
-      <div id="role-sections"></div>
+  <!-- ===== TENANT ADMIN ===== -->
+
+  <!-- TEAM -->
+  <div class="page" id="page-team">
+    <div class="page-header"><div><h1>Team</h1><p id="team-sub">Members of your project.</p></div></div>
+    <div class="page-body"><div class="grid-2">
+      <div class="card"><div class="card-head"><h3>Add a member</h3></div><div class="card-body">
+        <div class="field-row"><div class="field"><label>First name</label><input id="m-fname" placeholder="Jane"></div><div class="field"><label>Last name</label><input id="m-lname" placeholder="Smith"></div></div>
+        <div class="field"><label>Email</label><input type="email" id="m-email" placeholder="jane@acme.com"></div>
+        <div class="field"><label>Phone (optional)</label><input id="m-phone" placeholder="+13100000000"></div>
+        <div class="field"><label>Role (grants its template tracks/junctures)</label><select id="m-role"><option value="">— none —</option></select></div>
+        <div class="field"><label>Phases</label><div id="pick-phases" class="pick"></div></div>
+        <div class="field"><label>Tracks</label><div id="pick-tracks" class="pick"></div></div>
+        <div class="field"><label>Technology junctures</label><div id="pick-junctures" class="pick"></div></div>
+        <button class="btn btn-primary" id="m-btn" onclick="addMember()">Add member to project</button>
+      </div></div>
+      <div class="card"><div class="card-head"><h3>Members</h3><span class="hint"><span id="team-count">0</span> total</span></div>
+        <div id="team-list"></div></div>
+    </div></div>
+  </div>
+
+  <!-- SURVEYS -->
+  <div class="page" id="page-surveys">
+    <div class="page-header"><div><h1>Surveys</h1><p>Surveys sent to your project's team on a schedule.</p></div></div>
+    <div class="page-body"><div class="grid-2">
+      <div class="card"><div class="card-head"><h3>Create a survey</h3></div><div class="card-body">
+        <div class="field"><label>Survey title</label><input id="sv-title" placeholder="Daily Log"></div>
+        <div class="field-row"><div class="field"><label>Send at (time)</label><input type="time" id="sv-time"></div>
+          <div class="field"><label>Resend to non-responders (time)</label><input type="time" id="sv-resend"></div></div>
+        <div class="field"><label>Send on days</label><div id="sv-days" class="day-row">
+          <label class="day"><input type="checkbox" value="mon">Mon</label><label class="day"><input type="checkbox" value="tue">Tue</label>
+          <label class="day"><input type="checkbox" value="wed">Wed</label><label class="day"><input type="checkbox" value="thu">Thu</label>
+          <label class="day"><input type="checkbox" value="fri">Fri</label><label class="day"><input type="checkbox" value="sat">Sat</label>
+          <label class="day"><input type="checkbox" value="sun">Sun</label></div></div>
+        <button class="btn btn-primary" onclick="createSurvey()">Create survey</button>
+      </div></div>
+      <div class="card"><div class="card-head"><h3>Surveys</h3></div><div id="surveys-list"></div></div>
+    </div></div>
+  </div>
+
+  <!-- TENANT DASHBOARD (responses) -->
+  <div class="page" id="page-responses">
+    <div class="page-header"><div><h1>Dashboard</h1><p>Who has submitted each survey — filter by send date.</p></div>
+      <div style="display:flex;gap:10px"><select id="rs-survey" style="width:auto" onchange="onSurveyChange()"></select>
+      <select id="rs-date" style="width:auto" onchange="loadSurveyStatus()"></select></div></div>
+    <div class="page-body">
+      <div class="stat-grid" id="rs-stats" style="grid-template-columns:repeat(3,1fr);max-width:560px"></div>
+      <div class="card"><table><thead><tr><th>Member</th><th>Email</th><th>Status</th><th>Last submitted</th></tr></thead><tbody id="rs-tbody"></tbody></table></div>
     </div>
+  </div>
 
+  <!-- ROLES (per-role templates) -->
+  <div class="page" id="page-roles">
+    <div class="page-header"><div><h1>Roles</h1><p>Give each role its default tracks &amp; junctures. Assigning a member that role grants these automatically.</p></div></div>
+    <div class="page-body" id="roles-body"></div>
   </div>
 </div>
 
-<!-- ADD MEMBER MODAL -->
-<div class="modal-backdrop" id="modal-add">
-  <div class="modal">
-    <h2>Add team member</h2>
-    <div class="field-row">
-      <div class="field">
-        <label>First name</label>
-        <input type="text" id="new-fname" placeholder="Jane">
-      </div>
-      <div class="field">
-        <label>Last name</label>
-        <input type="text" id="new-lname" placeholder="Smith">
-      </div>
-    </div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="new-email" placeholder="jane@tower5.com">
-    </div>
-    <div class="field">
-      <label>Phone (for SMS)</label>
-      <input type="text" id="new-phone" placeholder="+1 310 000 0000">
-    </div>
-    <div class="field">
-      <label>Role</label>
-      <select id="new-role">
-        <option value="Director">Director</option>
-        <option value="Editor">Editor</option>
-        <option value="Producer">Producer</option>
-        <option value="VFX / Tech">VFX / Tech</option>
-        <option value="Legal / Compliance">Legal / Compliance</option>
-        <option value="Knowledge Management">Knowledge Management</option>
-      </select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="addMember()">Add member</button>
-    </div>
-  </div>
-</div>
+<!-- MODALS -->
+<div class="modal-bd" id="modal-project"><div class="modal">
+  <h2>Add project</h2>
+  <div class="field"><label>Project details</label><textarea id="p-details" placeholder="Project name / description"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-project')">Cancel</button><button class="btn btn-primary" onclick="addProject()">Add</button></div>
+</div></div>
 
-<!-- CONNECTION / API KEY MODAL -->
-<div class="modal-backdrop" id="modal-key">
-  <div class="modal">
-    <h2>Admin connection</h2>
-    <div class="field">
-      <label>API base URL</label>
-      <input type="text" id="api-base-input" placeholder="https://xxxx.execute-api.us-west-2.amazonaws.com/prod">
-    </div>
-    <div class="field">
-      <label>Admin API key (x-api-key)</label>
-      <input type="text" id="api-key-input" placeholder="Paste your API key">
-    </div>
-    <p style="font-size:12px;color:var(--gray);line-height:1.6">
-      Both are stored only in this browser. Get them from the SAM deploy outputs:<br>
-      <code style="color:var(--white-dim)">aws apigateway get-api-key --api-key &lt;ApiKeyId&gt; --include-value --query value --output text</code>
-    </p>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeKeyModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveConnection()">Save &amp; connect</button>
-    </div>
-  </div>
-</div>
+<div class="modal-bd" id="modal-tenant"><div class="modal">
+  <h2>Add tenant admin</h2>
+  <div class="field"><label>Email</label><input type="email" id="tn-email" placeholder="lead@acme.com"></div>
+  <div class="field"><label>Temporary password</label><input id="tn-pass" placeholder="8+ chars, mixed case + number"></div>
+  <div class="field"><label>Project</label><select id="tn-project"></select></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-tenant')">Cancel</button><button class="btn btn-primary" onclick="addTenant()">Create</button></div>
+</div></div>
+
+<div class="modal-bd" id="modal-edit-member"><div class="modal">
+  <h2>Edit member options</h2>
+  <div class="field"><label>Role</label><select id="em-role"><option value="">— none —</option></select></div>
+  <div class="field"><label>Phases</label><div id="em-phases" class="pick"></div></div>
+  <div class="field"><label>Tracks</label><div id="em-tracks" class="pick"></div></div>
+  <div class="field"><label>Technology junctures</label><div id="em-junctures" class="pick"></div></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-edit-member')">Cancel</button><button class="btn btn-primary" onclick="saveEditMember()">Save</button></div>
+</div></div>
+
+<div class="modal-bd" id="modal-edit-survey"><div class="modal">
+  <h2>Edit survey</h2>
+  <div class="field"><label>Survey title</label><input id="es-title"></div>
+  <div class="field-row"><div class="field"><label>Send at (time)</label><input type="time" id="es-time"></div>
+    <div class="field"><label>Resend to non-responders (time)</label><input type="time" id="es-resend"></div></div>
+  <div class="field"><label>Send on days</label><div id="es-days" class="day-row">
+    <label class="day"><input type="checkbox" value="mon">Mon</label><label class="day"><input type="checkbox" value="tue">Tue</label>
+    <label class="day"><input type="checkbox" value="wed">Wed</label><label class="day"><input type="checkbox" value="thu">Thu</label>
+    <label class="day"><input type="checkbox" value="fri">Fri</label><label class="day"><input type="checkbox" value="sat">Sat</label>
+    <label class="day"><input type="checkbox" value="sun">Sun</label></div></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-edit-survey')">Cancel</button><button class="btn btn-primary" onclick="saveEditSurvey()">Save</button></div>
+</div></div>
 
 <div id="toast"></div>
 
 <script>
-// ─── CONNECTION ───────────────────────────────────────────────────────────────
-// Persisted in this browser. Set via the "Connection" modal, or hard-code API_BASE.
-let API_BASE = localStorage.getItem('nett_api_base') || '';
-let API_KEY  = localStorage.getItem('nett_api_key')  || '';
-const LIVE = () => !!API_BASE;
+// ─── CONFIG / AUTH ──────────────────────────────────────────────────────────
+const INJECTED_API_BASE = '';
+const INJECTED_CLIENT_ID = '';
+const INJECTED_REGION = 'us-east-2';
+let API_BASE = INJECTED_API_BASE || localStorage.getItem('t5_api') || '';
+let CLIENT_ID = INJECTED_CLIENT_ID || localStorage.getItem('t5_client') || '';
+let REGION = INJECTED_REGION || localStorage.getItem('t5_region') || 'us-east-2';
+let idToken = localStorage.getItem('t5_token') || '';
 
-// Roles the form/config support. Drives the role-override sections.
-const ROLES = ['Director', 'Editor', 'Producer', 'VFX / Tech', 'Legal / Compliance', 'Knowledge Management'];
+let IS_SUPER = false;
+let selectedProject = null;
+let teamCache = [], editingPum = null, editingSurvey = null;
+const cache = { projects:[], phases:[], tracks:[], junctures:[], roles:[], surveys:[] };
+const byId = (a)=>Object.fromEntries(a.map(x=>[x.id,x]));
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
-// In preview mode (no API_BASE) these mocks render so the panel is explorable.
-const state = {
-  team: [
-    { memberId:'m1', fname:'Marcus',  lname:'Webb',    email:'m.webb@tower5.com',    phone:'+13101110001', role:'Director',             status:'active' },
-    { memberId:'m2', fname:'Priya',   lname:'Nair',    email:'p.nair@tower5.com',    phone:'+13101110002', role:'Editor',               status:'active' },
-    { memberId:'m3', fname:'Carlos',  lname:'Fuentes', email:'c.fuentes@tower5.com', phone:'+13101110003', role:'VFX / Tech',           status:'active' },
-    { memberId:'m4', fname:'Dana',    lname:'Osei',    email:'d.osei@tower5.com',    phone:'+13101110004', role:'Producer',             status:'active' },
-    { memberId:'m5', fname:'Tom',     lname:'Hirsch',  email:'t.hirsch@tower5.com',  phone:'+13101110005', role:'Legal / Compliance',   status:'active' },
-    { memberId:'m6', fname:'Roberto', lname:'Salinas', email:'r.salinas@tower5.com', phone:'+13101110006', role:'VFX / Tech',           status:'pending' },
-  ],
-  tags: {
-    phase:    ['Development','Pre-Production','Principal Photography','Post-Production','Distribution'],
-    track:    ['Creative','Technical / Production','Legal','Compliance','Knowledge Management'],
-    priority: ['Volumetric Data','Performance Capture','Visual Consistency','Asynchronous Assembly','AI Integration'],
-  },
-  roleOverrides: {},   // { 'Director': { track:[], priority:[] }, ... } — ensured per ROLES
-  examples: {},        // preserved from backend config on save
-  localSeq: 100,
-};
+const SUPER_TABS  = ['projects','catalog','tenants','dashboard','queries'];
+const TENANT_TABS = ['team','roles','surveys','responses'];
+const TAB_LABEL = { projects:'Projects', catalog:'Catalog', tenants:'Tenants', dashboard:'Dashboard', queries:'Queries', team:'Team', roles:'Roles', surveys:'Surveys', responses:'Dashboard' };
 
-// ─── API HELPER ────────────────────────────────────────────────────────────────
-async function api(path, opts = {}) {
-  const res = await fetch(API_BASE + path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY, ...(opts.headers || {}) },
-  });
-  if (!res.ok) {
-    let msg = `Request failed (${res.status})`;
-    try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
-    throw new Error(msg);
-  }
+(function boot(){
+  if(!API_BASE||!CLIENT_ID) return showSettings();
+  if(idToken && Date.now()<Number(localStorage.getItem('t5_exp')||0)) enterApp(); else showLogin();
+})();
+function ov(on){ document.getElementById('overlay').classList.toggle('hidden',!on); }
+function showSettings(){ ov(true); hide('app'); hide('login-view'); show('settings-view'); v('cfg-api',API_BASE); v('cfg-client',CLIENT_ID); v('cfg-region',REGION); }
+function saveSettings(){ API_BASE=g('cfg-api').replace(/\/$/,''); CLIENT_ID=g('cfg-client'); REGION=g('cfg-region')||'us-east-2'; localStorage.setItem('t5_api',API_BASE); localStorage.setItem('t5_client',CLIENT_ID); localStorage.setItem('t5_region',REGION); showLogin(); }
+function showLogin(){ ov(true); hide('app'); hide('settings-view'); show('login-view'); }
+
+async function doLogin(){
+  const email=g('login-email'), password=document.getElementById('login-password').value;
+  const err=document.getElementById('login-err'), btn=document.getElementById('login-btn'); err.textContent='';
+  if(!email||!password){ err.textContent='Enter email and password.'; return; }
+  btn.disabled=true; btn.textContent='Signing in…';
+  try{
+    const res=await fetch(`https://cognito-idp.${REGION}.amazonaws.com/`,{method:'POST',headers:{'Content-Type':'application/x-amz-json-1.1','X-Amz-Target':'AWSCognitoIdentityProviderService.InitiateAuth'},body:JSON.stringify({AuthFlow:'USER_PASSWORD_AUTH',ClientId:CLIENT_ID,AuthParameters:{USERNAME:email,PASSWORD:password}})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(prettyCognito(data));
+    if(data.ChallengeName) throw new Error('Account needs a permanent password — set it with admin-set-user-password --permanent.');
+    const r=data.AuthenticationResult; idToken=r.IdToken; localStorage.setItem('t5_token',idToken); localStorage.setItem('t5_exp',String(Date.now()+(r.ExpiresIn||3600)*1000));
+    enterApp();
+  }catch(e){ err.textContent=e.message; } finally { btn.disabled=false; btn.textContent='Sign in'; }
+}
+function prettyCognito(d){ const t=(d.__type||'').split('#').pop(); if(t==='NotAuthorizedException') return 'Incorrect email or password.'; if(t==='UserNotFoundException') return 'No such user.'; return d.message||t||'Login failed.'; }
+function logout(msg){ idToken=''; localStorage.removeItem('t5_token'); localStorage.removeItem('t5_exp'); showLogin(); if(msg) showToast(msg); }
+
+async function enterApp(){
+  ov(false); document.getElementById('app').style.display='block';
+  let me; try{ me=await (await api('/admin/me')).json(); }catch{ return logout('Could not load your profile — sign in again.'); }
+  IS_SUPER=!!me.isSuper;
+  document.getElementById('who').textContent=me.email||'';
+  document.getElementById('role-pill').textContent=IS_SUPER?'Super admin':'Tenant admin';
+  cache.projects=me.projects||[];
+  buildTabs(); await loadAll();
+}
+function buildTabs(){
+  const tabs=IS_SUPER?SUPER_TABS:TENANT_TABS;
+  document.getElementById('tabbar').innerHTML=tabs.map((t,i)=>`<div class="tab ${i===0?'active':''}" data-tab="${t}" onclick="switchTab('${t}')">${TAB_LABEL[t]}</div>`).join('');
+  switchTab(tabs[0]);
+}
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  if(tab==='dashboard') loadDashboard();
+  if(tab==='queries') populateQueryFilters();
+  if(tab==='responses') loadResponses();
+  if(tab==='roles') loadRoleTemplates();
+}
+
+// ─── API ────────────────────────────────────────────────────────────────────
+async function api(path,opts={}){
+  const res=await fetch(API_BASE+path,{...opts,headers:{'Content-Type':'application/json','Authorization':idToken,...(opts.headers||{})}});
+  if(res.status===401){ logout('Session expired — sign in again.'); throw new Error('Unauthorized'); }
+  if(!res.ok){ let m=`Request failed (${res.status})`; try{const j=await res.json(); if(j.error||j.message) m=j.error||j.message;}catch{} throw new Error(m); }
   return res;
 }
+const list=async(r,p)=>(await(await api(`/admin/${r}${qs(p)}`)).json())[r]||[];
+const create=async(r,b)=>(await api(`/admin/${r}`,{method:'POST',body:JSON.stringify(b)})).json();
+const del=async(r,id)=>api(`/admin/${r}/${encodeURIComponent(id)}`,{method:'DELETE'});
+const qs=(p)=>p?'?'+new URLSearchParams(p).toString():'';
 
-// ─── TABS ─────────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('page-'+tab).classList.add('active');
-}
-
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-// ─── CONNECTION MODAL ───────────────────────────────────────────────────────────
-function refreshConnStatus() {
-  const el = document.getElementById('conn-status');
-  if (!LIVE())       { el.textContent = 'Preview mode';  el.style.color = 'var(--gray)'; }
-  else if (!API_KEY) { el.textContent = 'Key required';  el.style.color = '#e67e22'; }
-  else               { el.textContent = '● Connected';   el.style.color = 'var(--success)'; }
-}
-
-function openKeyModal() {
-  document.getElementById('api-base-input').value = API_BASE;
-  document.getElementById('api-key-input').value = API_KEY;
-  document.getElementById('modal-key').classList.add('open');
-}
-function closeKeyModal() { document.getElementById('modal-key').classList.remove('open'); }
-
-async function saveConnection() {
-  API_BASE = document.getElementById('api-base-input').value.trim().replace(/\/$/, '');
-  API_KEY  = document.getElementById('api-key-input').value.trim();
-  localStorage.setItem('nett_api_base', API_BASE);
-  localStorage.setItem('nett_api_key', API_KEY);
-  closeKeyModal();
-  refreshConnStatus();
-  showToast(LIVE() ? 'Connected. Loading live data…' : 'Cleared — back to preview mode.');
-  await loadAll();
-}
-
-// ─── DATA LOADING ────────────────────────────────────────────────────────────────
-async function loadAll() {
-  await Promise.all([loadTeam(), loadConfig()]);
-}
-
-async function loadTeam() {
-  if (LIVE()) {
-    try {
-      const data = await (await api('/admin/members')).json();
-      state.team = data.members || [];
-    } catch (e) { showToast('Team: ' + e.message); }
-  }
-  renderTeam();
-  updateCounts();
-}
-
-async function loadConfig() {
-  if (LIVE()) {
-    try {
-      const cfg = await (await api('/admin/config')).json();
-      if (cfg.tags) state.tags = cfg.tags;
-      state.roleOverrides = cfg.roleOverrides || {};
-      state.examples = cfg.examples || {};
-    } catch (e) { showToast('Config: ' + e.message); }
-  }
-  ['phase','track','priority'].forEach(renderTags);
-  renderRoleSections();
-}
-
-// PUT the whole config back after any edit (no-op in preview mode).
-async function persistConfig() {
-  if (!LIVE()) return;
-  try {
-    await api('/admin/config', {
-      method: 'PUT',
-      body: JSON.stringify({ tags: state.tags, roleOverrides: state.roleOverrides, examples: state.examples }),
-    });
-  } catch (e) { showToast('Not saved: ' + e.message); }
-}
-
-function updateCounts() {
-  const opt = document.querySelector('#dispatch-target option[value="all"]');
-  if (opt) opt.textContent = `All team members (${state.team.length})`;
-}
-
-// ─── EXPORT ────────────────────────────────────────────────────────────────────
-async function exportCsv() {
-  if (!LIVE()) { showToast('Preview mode — connect to export real responses.'); return; }
-  try {
-    const res = await api('/admin/export');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `nett-responses-${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    showToast('CSV exported.');
-  } catch (e) { showToast('Export: ' + e.message); }
-}
-
-// ─── DISPATCH ─────────────────────────────────────────────────────────────────
-async function sendDispatch() {
-  const audience = document.getElementById('dispatch-target').value;
-  const channel  = document.getElementById('dispatch-channel').value;
-  const note     = document.getElementById('dispatch-note').value.trim();
-
-  if (!LIVE()) { showToast('Preview mode — connect to send real forms.'); return; }
-
-  const btn = event.target;
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = 'Sending…';
-  try {
-    const data = await (await api('/admin/dispatch', {
-      method: 'POST',
-      body: JSON.stringify({ audience, channel, note }),
-    })).json();
-    showToast(`Sent to ${data.sent}/${data.recipients} recipient(s)${data.failed ? `, ${data.failed} failed` : ''}.`);
-  } catch (e) {
-    showToast('Dispatch: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
+// ─── LOAD ALL ───────────────────────────────────────────────────────────────
+async function loadAll(){
+  try{
+    const [phases,tracks,junctures,roles]=await Promise.all([list('phases'),list('tracks'),list('junctures'),list('roles')]);
+    Object.assign(cache,{phases,tracks,junctures,roles});
+  }catch(e){ showToast(e.message); }
+  if(IS_SUPER){
+    renderProjects(); renderCatalog(); fillProjectDropdowns(); loadTenants();
+  }else{
+    document.getElementById('team-sub').textContent='Members of '+((cache.projects[0]||{}).project_details||'your project')+'.';
+    renderPicks(); loadTeam(); loadSurveys();
   }
 }
 
-// The real schedule lives in EventBridge; these toggles are reference-only.
-function toggleSchedule(cb, which) {
-  cb.checked = true; // can't be changed from here
-  showToast('Schedule is managed in AWS EventBridge — edit template.yaml to change it.');
+// ─── SUPER: PROJECTS ────────────────────────────────────────────────────────
+function renderProjects(){
+  document.getElementById('proj-count').textContent=cache.projects.length;
+  document.getElementById('proj-list').innerHTML=cache.projects.length?cache.projects.map(p=>
+    `<div class="list-row ${selectedProject===p.id?'sel':''}" onclick="selectProject('${p.id}')"><span class="nm">${esc(p.project_details||'(untitled)')}</span><span class="muted">›</span></div>`).join('')
+    :`<div class="empty">No projects yet.</div>`;
+}
+async function selectProject(id){
+  selectedProject=id; renderProjects();
+  const p=byId(cache.projects)[id];
+  document.getElementById('proj-sel-title').textContent=p?esc(p.project_details||'Team'):'Team';
+  document.getElementById('proj-analytics').style.display='';
+  document.getElementById('proj-remove').style.display='';
+  const box=document.getElementById('proj-members'); box.innerHTML='<div class="empty">Loading…</div>';
+  let team=[]; try{ team=(await (await api('/admin/team?project_id='+encodeURIComponent(id))).json()).team||[]; }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
+  box.innerHTML = team.length? `<table><thead><tr><th>Name</th><th>Email</th><th>Assigned</th></tr></thead><tbody>${
+    team.map(m=>`<tr><td class="name-cell">${esc((m.fname||'')+' '+(m.lname||''))}</td><td>${esc(m.email)}</td>
+      <td>${optBadges(m.options)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">No members on this project.</div>`;
+}
+function optBadges(o){ if(!o) return '<span class="muted">—</span>'; const all=[...(o.phase||[]),...(o.track||[]),...(o.juncture||[])]; return all.length?all.map(x=>`<span class="chip">${esc(x.name||x)}</span>`).join(''):'<span class="muted">—</span>'; }
+function analyticsForSelected(){ switchTab('dashboard'); v('dash-project',selectedProject); loadDashboard(); }
+async function addProject(){
+  const details=g('p-details'); if(!details) return showToast('Details are required.');
+  try{ const p=await create('projects',{project_details:details}); cache.projects.push(p); renderProjects(); fillProjectDropdowns(); closeModal('modal-project'); v('p-details',''); showToast('Project added.'); }catch(e){ showToast(e.message); }
+}
+async function rmSelectedProject(){ if(!selectedProject) return; try{ await del('projects',selectedProject); cache.projects=cache.projects.filter(p=>p.id!==selectedProject); selectedProject=null; document.getElementById('proj-members').innerHTML='<div class="empty">Select a project.</div>'; document.getElementById('proj-analytics').style.display='none'; document.getElementById('proj-remove').style.display='none'; renderProjects(); fillProjectDropdowns(); showToast('Project removed.'); }catch(e){ showToast(e.message); } }
+
+function fillProjectDropdowns(){
+  const opts=cache.projects.map(p=>`<option value="${p.id}">${esc(p.project_details||'(untitled)')}</option>`).join('');
+  const dash=document.getElementById('dash-project'); if(dash) dash.innerHTML='<option value="">All projects</option>'+opts;
+  const qp=document.getElementById('q-project'); if(qp) qp.innerHTML='<option value="">All projects</option>'+opts;
+  const tn=document.getElementById('tn-project'); if(tn) tn.innerHTML=opts;
+  const qj=document.getElementById('q-juncture'); if(qj) qj.innerHTML='<option value="">Any juncture</option>'+cache.junctures.map(j=>`<option value="${esc(j.juncture_name)}">${esc(j.juncture_name)}</option>`).join('');
 }
 
-// ─── TEAM ─────────────────────────────────────────────────────────────────────
-function renderTeam() {
-  const tbody = document.getElementById('team-tbody');
-  if (!state.team.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:28px">No team members yet. Use “+ Add member”.</td></tr>`;
-    return;
+// ─── SUPER: CATALOG ─────────────────────────────────────────────────────────
+const CAT={ phases:{col:'phase_name'}, tracks:{col:'track_name'}, junctures:{col:'juncture_name'}, roles:{col:'role_name'} };
+function renderCatalog(){
+  for(const r of Object.keys(CAT)){ const col=CAT[r].col; const el=document.getElementById('tags-'+r); if(!el) continue;
+    el.innerHTML=cache[r].length?cache[r].map(x=>`<span class="tag">${esc(x[col])}<button class="tag-x" onclick="rmCatalog('${r}','${x.id}')">×</button></span>`).join(''):`<span class="sub" style="margin:0">None yet.</span>`;
   }
-  tbody.innerHTML = state.team.map(m => `
-    <tr>
-      <td style="font-weight:600;color:var(--white)">${m.fname} ${m.lname}</td>
-      <td>${m.email}</td>
-      <td><span class="role-badge">${m.role}</span></td>
-      <td>
-        <span class="status-dot ${m.status === 'active' ? 'status-active' : 'status-pending'}"></span>
-        ${m.status === 'active' ? 'Active' : 'Pending'}
-      </td>
-      <td style="text-align:right">
-        <button class="btn btn-danger btn-sm" onclick="removeMember('${m.memberId}')">Remove</button>
-      </td>
-    </tr>
-  `).join('');
+}
+async function addCatalog(r){ const val=g('in-'+r); if(!val) return; try{ const row=await create(r,{[CAT[r].col]:val}); cache[r].push(row); v('in-'+r,''); renderCatalog(); fillProjectDropdowns(); }catch(e){ showToast(e.message); } }
+async function rmCatalog(r,id){ try{ await del(r,id); cache[r]=cache[r].filter(x=>x.id!==id); renderCatalog(); fillProjectDropdowns(); }catch(e){ showToast(e.message); } }
+
+// ─── SUPER: TENANTS ─────────────────────────────────────────────────────────
+async function loadTenants(){
+  let admins=[]; try{ admins=await list('admins'); }catch{ return; }
+  const p=byId(cache.projects);
+  document.getElementById('tenants-tbody').innerHTML=admins.length?admins.map(a=>`<tr>
+    <td class="name-cell">${esc(a.email||a.sub)}</td>
+    <td>${(a.projects||[]).map(id=>`<span class="badge">${p[id]?esc(p[id].project_details):'?'}</span>`).join(' ')||'<span class="muted">none</span>'}</td>
+    <td style="text-align:right"><button class="btn btn-outline btn-sm" onclick="rmTenant('${a.sub}')">Remove</button></td></tr>`).join('')
+    :`<tr><td colspan="3" class="empty">No tenant admins yet.</td></tr>`;
+}
+async function addTenant(){
+  const email=g('tn-email'), password=g('tn-pass'), project=g('tn-project');
+  if(!email||!password) return showToast('Email and password are required.');
+  if(!project) return showToast('Pick a project.');
+  try{ await create('admins',{email,password,project_ids:[project]}); closeModal('modal-tenant'); v('tn-email',''); v('tn-pass',''); loadTenants(); showToast('Tenant admin created.'); }catch(e){ showToast(e.message); }
+}
+async function rmTenant(sub){ try{ await del('admins',sub); loadTenants(); showToast('Removed.'); }catch(e){ showToast(e.message); } }
+
+// ─── SUPER: DASHBOARD ───────────────────────────────────────────────────────
+async function loadDashboard(){
+  const pid=g('dash-project');
+  let d; try{ d=await (await api('/admin/stats'+(pid?('?project_id='+encodeURIComponent(pid)):''))).json(); }catch(e){ return showToast(e.message); }
+  const c=d.counts||{};
+  const cards=[['Users',c.users],['Projects',c.projects],['Surveys',c.surveys],['Forms sent',c.sent],['Responses',c.responses],['Response rate',(c.responseRate||0)+'%']];
+  document.getElementById('stat-grid').innerHTML=cards.map(([k,vv])=>`<div class="stat-card"><div class="stat-val">${vv??0}</div><div class="stat-key">${k}</div></div>`).join('');
+  const series=d.series||[]; const max=Math.max(1,...series.map(s=>+s.c));
+  document.getElementById('chart-series').innerHTML=series.length?series.map(s=>`<div class="bar-col"><div class="bar" style="height:${Math.round(+s.c/max*100)}%" title="${s.c}"></div><div class="bar-lbl">${esc(s.d.slice(5))}</div></div>`).join(''):'<div class="empty">No submissions in the last 14 days.</div>';
+  document.getElementById('by-project').innerHTML=barList(d.byProject);
+  document.getElementById('by-juncture').innerHTML=barList(d.byJuncture);
+}
+function barList(arr){ if(!arr||!arr.length) return '<div class="empty">No data.</div>'; const max=Math.max(1,...arr.map(x=>+x.c)); return arr.map(x=>`<div class="hbar-row"><div class="hbar-lbl" title="${esc(x.name)}">${esc(x.name)}</div><div class="hbar-track"><div class="hbar-fill" style="width:${Math.round(+x.c/max*100)}%"></div></div><div class="hbar-val">${x.c}</div></div>`).join(''); }
+
+// ─── SUPER: QUERIES ─────────────────────────────────────────────────────────
+let lastQueryRows=[];
+function populateQueryFilters(){ fillProjectDropdowns(); }
+async function runQuery(){
+  const p=new URLSearchParams(); const map={project_id:'q-project',juncture:'q-juncture',feedback_type:'q-type',from:'q-from',to:'q-to',q:'q-search'};
+  for(const [k,id] of Object.entries(map)){ const val=g(id); if(val) p.set(k,val); }
+  let d; try{ d=await (await api('/admin/query?'+p.toString())).json(); }catch(e){ return showToast(e.message); }
+  lastQueryRows=d.rows||[]; document.getElementById('q-count').textContent=`${lastQueryRows.length} result(s)`;
+  document.getElementById('q-tbody').innerHTML=lastQueryRows.length?lastQueryRows.map(r=>`<tr>
+    <td style="white-space:nowrap">${esc((r.submitted_at||'').replace('T',' ').slice(0,16))}</td>
+    <td>${esc((((r.fname||'')+' '+(r.lname||'')).trim())||r.email||'—')}</td>
+    <td>${esc(r.project_details||'—')}</td><td>${esc(r.juncture||'—')}</td>
+    <td>${esc((r.description||'').slice(0,160))}</td></tr>`).join(''):`<tr><td colspan="5" class="empty">No results.</td></tr>`;
+}
+function exportQuery(){
+  if(!lastQueryRows.length) return showToast('Run a query first.');
+  const cols=['submitted_at','email','fname','lname','project_details','juncture','phase','track','feedback_type','description'];
+  const cell=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const csv=[cols.join(',')].concat(lastQueryRows.map(r=>cols.map(c=>cell(r[c])).join(','))).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`tower5-query-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); showToast('Exported.');
 }
 
-function openAddMember() {
-  document.getElementById('modal-add').classList.add('open');
+// ─── TENANT: TEAM ───────────────────────────────────────────────────────────
+function renderPicks(){
+  document.getElementById('pick-phases').innerHTML=cache.phases.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.phase_name)}</label>`).join('')||'<span class="muted">No phases in catalog.</span>';
+  document.getElementById('pick-tracks').innerHTML=cache.tracks.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.track_name)}</label>`).join('')||'<span class="muted">No tracks in catalog.</span>';
+  document.getElementById('pick-junctures').innerHTML=cache.junctures.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.juncture_name)}</label>`).join('')||'<span class="muted">No junctures in catalog.</span>';
+  document.getElementById('m-role').innerHTML='<option value="">— none —</option>'+cache.roles.map(r=>`<option value="${r.id}">${esc(r.role_name)}</option>`).join('');
+}
+const picked=(id)=>[...document.querySelectorAll('#'+id+' input:checked')].map(c=>c.value);
+async function loadTeam(){
+  let team=[]; try{ team=(await (await api('/admin/team')).json()).team||[]; }catch(e){ return showToast(e.message); }
+  teamCache=team;
+  document.getElementById('team-count').textContent=team.length;
+  document.getElementById('team-list').innerHTML=team.length?`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Assigned</th><th></th></tr></thead><tbody>${
+    team.map(m=>`<tr><td class="name-cell">${esc((m.fname||'')+' '+(m.lname||''))}</td><td>${esc(m.email)}</td>
+      <td>${m.role_name?`<span class="badge">${esc(m.role_name)}</span>`:'<span class="muted">—</span>'}</td>
+      <td>${optBadges(m.options)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditMember('${m.pum_id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmMember('${m.pum_id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
+    :`<div class="empty">No members yet.</div>`;
+}
+async function addMember(){
+  const email=g('m-email'); if(!email) return showToast('Email is required.');
+  const body={ fname:g('m-fname'),lname:g('m-lname'),email,phone:g('m-phone')||undefined, role_uuid:g('m-role')||undefined, phases:picked('pick-phases'),tracks:picked('pick-tracks'),junctures:picked('pick-junctures') };
+  const btn=document.getElementById('m-btn'); btn.disabled=true; btn.textContent='Adding…';
+  try{ await create('team',body); ['m-fname','m-lname','m-email','m-phone'].forEach(i=>v(i,'')); v('m-role',''); document.querySelectorAll('#page-team .pick input:checked').forEach(c=>c.checked=false); loadTeam(); showToast('Member added.'); }
+  catch(e){ showToast(e.message); } finally { btn.disabled=false; btn.textContent='Add member to project'; }
+}
+async function rmMember(pumId){ try{ await del('team',pumId); loadTeam(); showToast('Member removed.'); }catch(e){ showToast(e.message); } }
+
+// ─── TENANT: SURVEYS ────────────────────────────────────────────────────────
+async function loadSurveys(){ try{ cache.surveys=await list('surveys'); }catch{ cache.surveys=[]; } renderSurveys(); }
+async function createSurvey(){
+  const project_uuid=(cache.projects[0]||{}).id; if(!project_uuid) return showToast('No project assigned to you.');
+  const title=g('sv-title'); if(!title) return showToast('Survey title is required.');
+  const send_time=g('sv-time')||undefined;
+  const resend_time=g('sv-resend')||undefined;
+  const send_days=[...document.querySelectorAll('#sv-days input:checked')].map(c=>c.value).join(',')||undefined;
+  try{ const sv=await create('surveys',{project_uuid,title,send_days,send_time,resend_time}); cache.surveys.push(sv); renderSurveys(); v('sv-title',''); v('sv-resend',''); document.querySelectorAll('#sv-days input:checked').forEach(c=>c.checked=false); showToast('Survey created.'); }catch(e){ showToast(e.message); }
+}
+function renderSurveys(){
+  const sched=(s)=>`${s.send_days?esc(s.send_days):'—'} @ ${s.send_time?esc(String(s.send_time).slice(0,5)):'—'}`;
+  document.getElementById('surveys-list').innerHTML=cache.surveys.length?`<table><thead><tr><th>Title</th><th>Schedule</th><th></th></tr></thead><tbody>${
+    cache.surveys.map(s=>`<tr><td class="name-cell">${esc(s.title||'(untitled)')}</td><td>${sched(s)}</td>
+      <td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="sendSurvey('${s.id}')">Send now</button> <button class="btn btn-ghost btn-sm" onclick="openEditSurvey('${s.id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmSurvey('${s.id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
+    :`<div class="empty">No surveys yet.</div>`;
+}
+async function rmSurvey(id){ try{ await del('surveys',id); cache.surveys=cache.surveys.filter(s=>s.id!==id); renderSurveys(); showToast('Survey removed.'); }catch(e){ showToast(e.message); } }
+async function sendSurvey(id){
+  const project_uuid=(cache.projects[0]||{}).id; if(!project_uuid) return showToast('No project assigned to you.');
+  if(!confirm('Send this survey link to everyone on the project now?')) return;
+  try{ const r=await create('dispatch',{project_id:project_uuid,audience:'all',channel:'both',survey_id:id}); showToast(`Sent — queued ${r.queued}/${r.recipients} recipient(s).`); }catch(e){ showToast(e.message); }
 }
 
-function closeModal() {
-  document.getElementById('modal-add').classList.remove('open');
-  ['new-fname','new-lname','new-email','new-phone'].forEach(id => document.getElementById(id).value = '');
+// ─── TENANT: EDIT MEMBER OPTIONS ────────────────────────────────────────────
+function openEditMember(pum){
+  const m=teamCache.find(x=>x.pum_id===pum); if(!m) return; editingPum=pum;
+  const grp=(kind,box,nameField)=>{ const have=new Set(((m.options&&m.options[kind])||[]).map(o=>o.cat));
+    document.getElementById(box).innerHTML=cache[kind+'s'].map(x=>`<label><input type="checkbox" value="${x.id}" ${have.has(x.id)?'checked':''}>${esc(x[nameField])}</label>`).join('')||'<span class="muted">None in catalog.</span>'; };
+  grp('phase','em-phases','phase_name'); grp('track','em-tracks','track_name'); grp('juncture','em-junctures','juncture_name');
+  document.getElementById('em-role').innerHTML='<option value="">— none —</option>'+cache.roles.map(r=>`<option value="${r.id}" ${m.role_uuid===r.id?'selected':''}>${esc(r.role_name)}</option>`).join('');
+  openModal('modal-edit-member');
+}
+async function saveEditMember(){
+  const body={ role_uuid:g('em-role')||undefined, phases:picked('em-phases'), tracks:picked('em-tracks'), junctures:picked('em-junctures') };
+  try{ await api('/admin/team/'+encodeURIComponent(editingPum),{method:'PUT',body:JSON.stringify(body)}); closeModal('modal-edit-member'); loadTeam(); showToast('Member updated.'); }catch(e){ showToast(e.message); }
 }
 
-async function addMember() {
-  const fname = document.getElementById('new-fname').value.trim();
-  const lname = document.getElementById('new-lname').value.trim();
-  const email = document.getElementById('new-email').value.trim();
-  const phone = document.getElementById('new-phone').value.trim();
-  const role  = document.getElementById('new-role').value;
-  if (!fname || !email) { showToast('Name and email are required.'); return; }
-
-  const payload = { fname, lname, email, phone, role, status: 'active' };
-  if (LIVE()) {
-    try {
-      const data = await (await api('/admin/members', { method: 'POST', body: JSON.stringify(payload) })).json();
-      state.team.push(data.member);
-    } catch (e) { showToast(e.message); return; }
-  } else {
-    state.team.push({ memberId: 'local-' + (state.localSeq++), status: 'active', ...payload });
-  }
-  renderTeam();
-  updateCounts();
-  closeModal();
-  showToast(`${fname} ${lname} added.`);
+// ─── TENANT: EDIT SURVEY ────────────────────────────────────────────────────
+function openEditSurvey(id){
+  const s=cache.surveys.find(x=>x.id===id); if(!s) return; editingSurvey=id;
+  v('es-title',s.title||''); v('es-time',s.send_time?String(s.send_time).slice(0,5):''); v('es-resend',s.resend_time?String(s.resend_time).slice(0,5):'');
+  const days=(s.send_days||'').split(','); document.querySelectorAll('#es-days input').forEach(c=>c.checked=days.includes(c.value));
+  openModal('modal-edit-survey');
+}
+async function saveEditSurvey(){
+  const body={ title:g('es-title'), send_time:g('es-time')||null, resend_time:g('es-resend')||null, send_days:[...document.querySelectorAll('#es-days input:checked')].map(c=>c.value).join(',')||null };
+  if(!body.title) return showToast('Title is required.');
+  try{ const u=await(await api('/admin/surveys/'+encodeURIComponent(editingSurvey),{method:'PUT',body:JSON.stringify(body)})).json();
+    const i=cache.surveys.findIndex(x=>x.id===editingSurvey); if(i>=0) cache.surveys[i]=u; renderSurveys(); closeModal('modal-edit-survey'); showToast('Survey updated.'); }catch(e){ showToast(e.message); }
 }
 
-async function removeMember(memberId) {
-  const m = state.team.find(x => x.memberId === memberId);
-  if (LIVE()) {
-    try { await api(`/admin/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' }); }
-    catch (e) { showToast(e.message); return; }
-  }
-  state.team = state.team.filter(x => x.memberId !== memberId);
-  renderTeam();
-  updateCounts();
-  showToast(`${m ? m.fname + ' ' + m.lname : 'Member'} removed.`);
+// ─── TENANT: DASHBOARD (per-survey submitted / not) ─────────────────────────
+function loadResponses(){
+  const sel=document.getElementById('rs-survey');
+  sel.innerHTML=cache.surveys.map(s=>`<option value="${s.id}">${esc(s.title||'(untitled)')}</option>`).join('');
+  document.getElementById('rs-date').innerHTML='<option value="">All sends</option>';
+  if(cache.surveys.length){ loadSurveyStatus(); }
+  else { document.getElementById('rs-stats').innerHTML=''; document.getElementById('rs-tbody').innerHTML='<tr><td colspan="4" class="empty">No surveys yet.</td></tr>'; }
+}
+function onSurveyChange(){ document.getElementById('rs-date').value=''; loadSurveyStatus(); }
+async function loadSurveyStatus(){
+  const sid=g('rs-survey'); if(!sid) return;
+  const date=g('rs-date');
+  let d; try{ d=await(await api('/admin/survey-status?survey_id='+encodeURIComponent(sid)+(date?'&date='+encodeURIComponent(date):''))).json(); }catch(e){ return showToast(e.message); }
+  const dsel=document.getElementById('rs-date'); const cur=dsel.value;
+  dsel.innerHTML='<option value="">All sends</option>'+(d.dates||[]).map(x=>`<option value="${x}" ${x===cur?'selected':''}>${x}</option>`).join('');
+  const rate=d.total?Math.round(d.submitted/d.total*100):0;
+  document.getElementById('rs-stats').innerHTML=[['Submitted',d.submitted],['Not yet',d.total-d.submitted],['Response rate',rate+'%']].map(([k,vv])=>`<div class="stat-card"><div class="stat-val">${vv}</div><div class="stat-key">${k}</div></div>`).join('');
+  document.getElementById('rs-tbody').innerHTML=(d.members||[]).length?d.members.map(m=>`<tr>
+    <td class="name-cell">${esc(((m.fname||'')+' '+(m.lname||'')).trim())}</td><td>${esc(m.email)}</td>
+    <td>${m.submitted?'<span class="dot dot-green"></span>Submitted':'<span class="dot dot-orange"></span>Not yet'}</td>
+    <td>${m.last_submitted?esc(String(m.last_submitted).replace('T',' ').slice(0,16)):'—'}</td></tr>`).join(''):`<tr><td colspan="4" class="empty">No members on this project.</td></tr>`;
 }
 
-// ─── TAGS ─────────────────────────────────────────────────────────────────────
-function renderTags(key) {
-  const container = document.getElementById('tags-'+key);
-  container.innerHTML = state.tags[key].map((v,i) => `
-    <span class="tag">
-      ${v}
-      <button class="tag-remove" onclick="removeTag('${key}',${i})" title="Remove">×</button>
-    </span>
-  `).join('');
-}
-
-function addTag(key) {
-  const input = document.getElementById('input-'+key);
-  const val = input.value.trim();
-  if (!val || state.tags[key].includes(val)) { input.value=''; return; }
-  state.tags[key].push(val);
-  input.value = '';
-  renderTags(key);
-  persistConfig();
-  showToast(`"${val}" added to ${key}.`);
-}
-
-function removeTag(key, idx) {
-  const val = state.tags[key][idx];
-  state.tags[key].splice(idx, 1);
-  renderTags(key);
-  persistConfig();
-  showToast(`"${val}" removed.`);
-}
-
-function handleTagKey(e, key) {
-  if (e.key === 'Enter') { e.preventDefault(); addTag(key); }
-}
-
-// ─── ROLE OVERRIDES ───────────────────────────────────────────────────────────
-function ensureOverride(role) {
-  if (!state.roleOverrides[role]) state.roleOverrides[role] = { track: [], priority: [] };
-}
-
-function renderRoleSections() {
-  const container = document.getElementById('role-sections');
-  const roles = ROLES;
-  roles.forEach(ensureOverride);
-  container.innerHTML = roles.map(role => {
-    const safeRole = role.replace(/[^a-z0-9]/gi,'_');
-    return `
-      <div class="role-section" id="rs-${safeRole}">
-        <div class="role-section-header" onclick="toggleRoleSection('${safeRole}')">
-          <span class="role-section-title">${role}</span>
-          <span class="role-section-chevron">▾</span>
-        </div>
-        <div class="role-section-body">
-          <div class="field">
-            <label>Additional track options</label>
-            <div id="rtags-${safeRole}-track" class="tag-list"></div>
-            <div class="tag-input-row">
-              <input type="text" id="rinput-${safeRole}-track" placeholder="Add track for ${role}…" onkeydown="handleRoleTagKey(event,'${safeRole}','track')">
-              <button class="btn btn-ghost btn-sm" onclick="addRoleTag('${safeRole}','track')">Add</button>
-            </div>
-          </div>
-          <div class="field" style="margin-top:12px">
-            <label>Additional priority juncture options</label>
-            <div id="rtags-${safeRole}-priority" class="tag-list"></div>
-            <div class="tag-input-row">
-              <input type="text" id="rinput-${safeRole}-priority" placeholder="Add juncture for ${role}…" onkeydown="handleRoleTagKey(event,'${safeRole}','priority')">
-              <button class="btn btn-ghost btn-sm" onclick="addRoleTag('${safeRole}','priority')">Add</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+// ─── TENANT: ROLES (per-role templates) ────────────────────────────────────
+async function loadRoleTemplates(){
+  let templates=[]; try{ templates=(await(await api('/admin/role-templates')).json()).templates||[]; }catch(e){ return showToast(e.message); }
+  const tmap={}; templates.forEach(t=>tmap[t.role_uuid]=t);
+  const body=document.getElementById('roles-body');
+  if(!cache.roles.length){ body.innerHTML='<div class="card"><div class="empty">No roles in the catalog yet — a super admin adds them in Catalog.</div></div>'; return; }
+  body.innerHTML=cache.roles.map(r=>{
+    const t=tmap[r.id]||{tracks:[],junctures:[]}; const ts=new Set(t.tracks), js=new Set(t.junctures);
+    const tracks=cache.tracks.map(x=>`<label><input type="checkbox" value="${x.id}" ${ts.has(x.id)?'checked':''}>${esc(x.track_name)}</label>`).join('')||'<span class="muted">no tracks in catalog</span>';
+    const juncts=cache.junctures.map(x=>`<label><input type="checkbox" value="${x.id}" ${js.has(x.id)?'checked':''}>${esc(x.juncture_name)}</label>`).join('')||'<span class="muted">no junctures in catalog</span>';
+    return `<div class="card"><div class="card-head"><h3>${esc(r.role_name)}</h3><button class="btn btn-primary btn-sm" onclick="saveRoleTemplate('${r.id}')">Save</button></div>
+      <div class="card-body"><div class="field"><label>Tracks</label><div class="pick" id="rt-${r.id}-tracks">${tracks}</div></div>
+      <div class="field" style="margin-bottom:0"><label>Technology junctures</label><div class="pick" id="rt-${r.id}-junctures">${juncts}</div></div></div></div>`;
   }).join('');
-  roles.forEach(role => {
-    const safeRole = role.replace(/[^a-z0-9]/gi,'_');
-    renderRoleTags(safeRole, 'track');
-    renderRoleTags(safeRole, 'priority');
-  });
+}
+async function saveRoleTemplate(roleId){
+  const pick=(suffix)=>[...document.querySelectorAll('#rt-'+roleId+'-'+suffix+' input:checked')].map(c=>c.value);
+  try{ await api('/admin/role-templates/'+encodeURIComponent(roleId),{method:'PUT',body:JSON.stringify({tracks:pick('tracks'),junctures:pick('junctures')})}); showToast('Role template saved.'); }catch(e){ showToast(e.message); }
 }
 
-function toggleRoleSection(safeRole) {
-  document.getElementById('rs-'+safeRole).classList.toggle('collapsed');
-}
-
-function renderRoleTags(safeRole, field) {
-  const role = safeRole.replace(/_/g, ' ');
-  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
-  if (!roleKey) return;
-  const tags = state.roleOverrides[roleKey][field];
-  const container = document.getElementById(`rtags-${safeRole}-${field}`);
-  if (!container) return;
-  container.innerHTML = tags.length === 0
-    ? `<span style="font-size:12px;color:var(--gray)">None — inherits global options only.</span>`
-    : tags.map((v,i) => `
-        <span class="tag">
-          ${v}
-          <button class="tag-remove" onclick="removeRoleTag('${safeRole}','${field}',${i})" title="Remove">×</button>
-        </span>
-      `).join('');
-}
-
-function addRoleTag(safeRole, field) {
-  const input = document.getElementById(`rinput-${safeRole}-${field}`);
-  const val = input.value.trim();
-  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
-  if (!val || !roleKey || state.roleOverrides[roleKey][field].includes(val)) { input.value=''; return; }
-  state.roleOverrides[roleKey][field].push(val);
-  input.value = '';
-  renderRoleTags(safeRole, field);
-  persistConfig();
-  showToast(`"${val}" added for ${roleKey}.`);
-}
-
-function removeRoleTag(safeRole, field, idx) {
-  const roleKey = Object.keys(state.roleOverrides).find(r => r.replace(/[^a-z0-9]/gi,'_') === safeRole);
-  if (!roleKey) return;
-  const val = state.roleOverrides[roleKey][field][idx];
-  state.roleOverrides[roleKey][field].splice(idx, 1);
-  renderRoleTags(safeRole, field);
-  persistConfig();
-  showToast(`"${val}" removed.`);
-}
-
-function handleRoleTagKey(e, safeRole, field) {
-  if (e.key === 'Enter') { e.preventDefault(); addRoleTag(safeRole, field); }
-}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-(async function init() {
-  refreshConnStatus();
-  await loadAll();
-  // Connected URL but no key yet → prompt for it.
-  if (LIVE() && !API_KEY) openKeyModal();
-})();
+// ─── UTIL ───────────────────────────────────────────────────────────────────
+function showToast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3200); }
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function g(id){ const e=document.getElementById(id); return e?e.value.trim():''; }
+function v(id,val){ const e=document.getElementById(id); if(e) e.value=val; }
+function show(id){ document.getElementById(id).style.display='block'; }
+function hide(id){ document.getElementById(id).style.display='none'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 </script>
 </body>
 </html>

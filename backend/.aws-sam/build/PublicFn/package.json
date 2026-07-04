@@ -1,7 +1,0 @@
-{
-  "name": "nett-backend",
-  "version": "1.0.0",
-  "private": true,
-  "description": "NETT work-around backend Lambdas. AWS SDK v3 is provided by the nodejs24.x runtime, so there are no runtime dependencies to install.",
-  "type": "commonjs"
-}
