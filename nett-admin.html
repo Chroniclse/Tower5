@@ -207,22 +207,26 @@
 
   <!-- QUERIES -->
   <div class="page" id="page-queries">
-    <div class="page-header"><div><h1>Queries</h1><p>Filter and export submitted responses.</p></div>
+    <div class="page-header"><div><h1>Queries</h1><p>Search and filter submitted reports — classify by project, phase, track, juncture, member, type or free text.</p></div>
       <button class="btn btn-ghost" onclick="exportQuery()">⬇ Export results</button></div>
     <div class="page-body">
       <div class="card"><div class="card-body">
         <div class="q-filters">
           <div class="field"><label>Project</label><select id="q-project"></select></div>
+          <div class="field"><label>Phase</label><select id="q-phase"></select></div>
+          <div class="field"><label>Track</label><select id="q-track"></select></div>
           <div class="field"><label>Technology Juncture</label><select id="q-juncture"></select></div>
           <div class="field"><label>Response type</label><select id="q-type"><option value="">Any</option><option value="text">Text</option><option value="audio">Audio</option></select></div>
+          <div class="field"><label>Member</label><input id="q-member" placeholder="name or email…" onkeydown="if(event.key==='Enter')runQuery()"></div>
           <div class="field"><label>From</label><input type="date" id="q-from"></div>
           <div class="field"><label>To</label><input type="date" id="q-to"></div>
-          <div class="field"><label>Search text</label><input id="q-search" placeholder="in description…"></div>
+          <div class="field"><label>Search text</label><input id="q-search" placeholder="in description…" onkeydown="if(event.key==='Enter')runQuery()"></div>
         </div>
         <button class="btn btn-primary" onclick="runQuery()">Run query</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearQuery()" style="margin-left:8px">Clear</button>
         <span class="muted" id="q-count" style="margin-left:14px"></span>
       </div></div>
-      <div class="card"><table><thead><tr><th>Submitted</th><th>User</th><th>Project</th><th>Juncture</th><th>Response</th></tr></thead><tbody id="q-tbody"><tr><td colspan="5" class="empty">Run a query to see results.</td></tr></tbody></table></div>
+      <div class="card"><table><thead><tr><th>Submitted</th><th>Member</th><th>Project</th><th>Phase</th><th>Track</th><th>Juncture</th><th>Type</th><th>Response</th></tr></thead><tbody id="q-tbody"><tr><td colspan="8" class="empty">Run a query to see results.</td></tr></tbody></table></div>
     </div>
   </div>
 
@@ -236,7 +240,7 @@
         <div class="field-row"><div class="field"><label>First name</label><input id="m-fname" placeholder="Jane"></div><div class="field"><label>Last name</label><input id="m-lname" placeholder="Smith"></div></div>
         <div class="field"><label>Email</label><input type="email" id="m-email" placeholder="jane@acme.com"></div>
         <div class="field"><label>Phone (optional)</label><input id="m-phone" placeholder="+13100000000"></div>
-        <div class="field"><label>Role (grants its template tracks/junctures)</label><select id="m-role"><option value="">— none —</option></select></div>
+        <div class="field"><label>Roles (each grants its template tracks/junctures)</label><div id="pick-roles" class="pick"></div></div>
         <div class="field"><label>Phases</label><div id="pick-phases" class="pick"></div></div>
         <div class="field"><label>Tracks</label><div id="pick-tracks" class="pick"></div></div>
         <div class="field"><label>Technology junctures</label><div id="pick-junctures" class="pick"></div></div>
@@ -279,7 +283,7 @@
 
   <!-- ROLES (per-role templates) -->
   <div class="page" id="page-roles">
-    <div class="page-header"><div><h1>Roles</h1><p>Give each role its default tracks &amp; junctures. Assigning a member that role grants these automatically.</p></div></div>
+    <div class="page-header"><div><h1>Roles</h1><p>Give each role its default tracks &amp; junctures (granted automatically when you assign a member that role) and a model example shown to employees.</p></div></div>
     <div class="page-body" id="roles-body"></div>
   </div>
 </div>
@@ -301,7 +305,7 @@
 
 <div class="modal-bd" id="modal-edit-member"><div class="modal">
   <h2>Edit member options</h2>
-  <div class="field"><label>Role</label><select id="em-role"><option value="">— none —</option></select></div>
+  <div class="field"><label>Roles</label><div id="em-roles" class="pick"></div></div>
   <div class="field"><label>Phases</label><div id="em-phases" class="pick"></div></div>
   <div class="field"><label>Tracks</label><div id="em-tracks" class="pick"></div></div>
   <div class="field"><label>Technology junctures</label><div id="em-junctures" class="pick"></div></div>
@@ -327,10 +331,10 @@
 // ─── CONFIG / AUTH ──────────────────────────────────────────────────────────
 const INJECTED_API_BASE = '';
 const INJECTED_CLIENT_ID = '';
-const INJECTED_REGION = 'us-east-2';
+const INJECTED_REGION = 'us-west-2';
 let API_BASE = INJECTED_API_BASE || localStorage.getItem('t5_api') || '';
 let CLIENT_ID = INJECTED_CLIENT_ID || localStorage.getItem('t5_client') || '';
-let REGION = INJECTED_REGION || localStorage.getItem('t5_region') || 'us-east-2';
+let REGION = INJECTED_REGION || localStorage.getItem('t5_region') || 'us-west-2';
 let idToken = localStorage.getItem('t5_token') || '';
 
 let IS_SUPER = false;
@@ -340,7 +344,7 @@ const cache = { projects:[], phases:[], tracks:[], junctures:[], roles:[], surve
 const byId = (a)=>Object.fromEntries(a.map(x=>[x.id,x]));
 
 const SUPER_TABS  = ['projects','catalog','tenants','dashboard','queries'];
-const TENANT_TABS = ['team','roles','surveys','responses'];
+const TENANT_TABS = ['team','roles','surveys','responses','queries'];
 const TAB_LABEL = { projects:'Projects', catalog:'Catalog', tenants:'Tenants', dashboard:'Dashboard', queries:'Queries', team:'Team', roles:'Roles', surveys:'Surveys', responses:'Dashboard' };
 
 (function boot(){
@@ -349,7 +353,7 @@ const TAB_LABEL = { projects:'Projects', catalog:'Catalog', tenants:'Tenants', d
 })();
 function ov(on){ document.getElementById('overlay').classList.toggle('hidden',!on); }
 function showSettings(){ ov(true); hide('app'); hide('login-view'); show('settings-view'); v('cfg-api',API_BASE); v('cfg-client',CLIENT_ID); v('cfg-region',REGION); }
-function saveSettings(){ API_BASE=g('cfg-api').replace(/\/$/,''); CLIENT_ID=g('cfg-client'); REGION=g('cfg-region')||'us-east-2'; localStorage.setItem('t5_api',API_BASE); localStorage.setItem('t5_client',CLIENT_ID); localStorage.setItem('t5_region',REGION); showLogin(); }
+function saveSettings(){ API_BASE=g('cfg-api').replace(/\/$/,''); CLIENT_ID=g('cfg-client'); REGION=g('cfg-region')||'us-west-2'; localStorage.setItem('t5_api',API_BASE); localStorage.setItem('t5_client',CLIENT_ID); localStorage.setItem('t5_region',REGION); showLogin(); }
 function showLogin(){ ov(true); hide('app'); hide('settings-view'); show('login-view'); }
 
 async function doLogin(){
@@ -433,10 +437,12 @@ async function selectProject(id){
   document.getElementById('proj-analytics').style.display='';
   document.getElementById('proj-remove').style.display='';
   const box=document.getElementById('proj-members'); box.innerHTML='<div class="empty">Loading…</div>';
-  let team=[]; try{ team=(await (await api('/admin/team?project_id='+encodeURIComponent(id))).json()).team||[]; }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
-  box.innerHTML = team.length? `<table><thead><tr><th>Name</th><th>Email</th><th>Assigned</th></tr></thead><tbody>${
+  let team=[], forms=[]; try{ const d=await (await api('/admin/team?project_id='+encodeURIComponent(id))).json(); team=d.team||[]; forms=d.forms||[]; }catch(e){ box.innerHTML=`<div class="empty">${esc(e.message)}</div>`; return; }
+  const formsHtml=forms.length?forms.map(f=>`<span class="chip">${esc(f.title||'(untitled)')}</span>`).join(''):'<span class="muted">—</span>';
+  box.innerHTML = team.length? `<table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Assigned</th><th>Forms</th></tr></thead><tbody>${
     team.map(m=>`<tr><td class="name-cell">${esc((m.fname||'')+' '+(m.lname||''))}</td><td>${esc(m.email)}</td>
-      <td>${optBadges(m.options)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">No members on this project.</div>`;
+      <td>${(m.roles&&m.roles.length)?m.roles.map(r=>`<span class="badge">${esc(r.name)}</span>`).join(' '):(m.role_name?`<span class="badge">${esc(m.role_name)}</span>`:'<span class="muted">—</span>')}</td>
+      <td>${optBadges(m.options)}</td><td>${formsHtml}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">No members on this project.</div>`;
 }
 function optBadges(o){ if(!o) return '<span class="muted">—</span>'; const all=[...(o.phase||[]),...(o.track||[]),...(o.juncture||[])]; return all.length?all.map(x=>`<span class="chip">${esc(x.name||x)}</span>`).join(''):'<span class="muted">—</span>'; }
 function analyticsForSelected(){ switchTab('dashboard'); v('dash-project',selectedProject); loadDashboard(); }
@@ -452,6 +458,8 @@ function fillProjectDropdowns(){
   const qp=document.getElementById('q-project'); if(qp) qp.innerHTML='<option value="">All projects</option>'+opts;
   const tn=document.getElementById('tn-project'); if(tn) tn.innerHTML=opts;
   const qj=document.getElementById('q-juncture'); if(qj) qj.innerHTML='<option value="">Any juncture</option>'+cache.junctures.map(j=>`<option value="${esc(j.juncture_name)}">${esc(j.juncture_name)}</option>`).join('');
+  const qph=document.getElementById('q-phase'); if(qph) qph.innerHTML='<option value="">Any phase</option>'+cache.phases.map(x=>`<option value="${esc(x.phase_name)}">${esc(x.phase_name)}</option>`).join('');
+  const qtk=document.getElementById('q-track'); if(qtk) qtk.innerHTML='<option value="">Any track</option>'+cache.tracks.map(x=>`<option value="${esc(x.track_name)}">${esc(x.track_name)}</option>`).join('');
 }
 
 // ─── SUPER: CATALOG ─────────────────────────────────────────────────────────
@@ -500,15 +508,21 @@ function barList(arr){ if(!arr||!arr.length) return '<div class="empty">No data.
 let lastQueryRows=[];
 function populateQueryFilters(){ fillProjectDropdowns(); }
 async function runQuery(){
-  const p=new URLSearchParams(); const map={project_id:'q-project',juncture:'q-juncture',feedback_type:'q-type',from:'q-from',to:'q-to',q:'q-search'};
+  const p=new URLSearchParams(); const map={project_id:'q-project',phase:'q-phase',track:'q-track',juncture:'q-juncture',feedback_type:'q-type',member:'q-member',from:'q-from',to:'q-to',q:'q-search'};
   for(const [k,id] of Object.entries(map)){ const val=g(id); if(val) p.set(k,val); }
   let d; try{ d=await (await api('/admin/query?'+p.toString())).json(); }catch(e){ return showToast(e.message); }
   lastQueryRows=d.rows||[]; document.getElementById('q-count').textContent=`${lastQueryRows.length} result(s)`;
   document.getElementById('q-tbody').innerHTML=lastQueryRows.length?lastQueryRows.map(r=>`<tr>
     <td style="white-space:nowrap">${esc((r.submitted_at||'').replace('T',' ').slice(0,16))}</td>
     <td>${esc((((r.fname||'')+' '+(r.lname||'')).trim())||r.email||'—')}</td>
-    <td>${esc(r.project_details||'—')}</td><td>${esc(r.juncture||'—')}</td>
-    <td>${esc((r.description||'').slice(0,160))}</td></tr>`).join(''):`<tr><td colspan="5" class="empty">No results.</td></tr>`;
+    <td>${esc(r.project_details||'—')}</td><td>${esc(r.phase||'—')}</td><td>${esc(r.track||'—')}</td><td>${esc(r.juncture||'—')}</td>
+    <td>${esc(r.feedback_type||'—')}</td>
+    <td>${esc((r.description||'').slice(0,160))}</td></tr>`).join(''):`<tr><td colspan="8" class="empty">No results.</td></tr>`;
+}
+function clearQuery(){
+  ['q-project','q-phase','q-track','q-juncture','q-type','q-member','q-from','q-to','q-search'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  lastQueryRows=[]; document.getElementById('q-count').textContent='';
+  document.getElementById('q-tbody').innerHTML='<tr><td colspan="8" class="empty">Run a query to see results.</td></tr>';
 }
 function exportQuery(){
   if(!lastQueryRows.length) return showToast('Run a query first.');
@@ -523,24 +537,25 @@ function renderPicks(){
   document.getElementById('pick-phases').innerHTML=cache.phases.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.phase_name)}</label>`).join('')||'<span class="muted">No phases in catalog.</span>';
   document.getElementById('pick-tracks').innerHTML=cache.tracks.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.track_name)}</label>`).join('')||'<span class="muted">No tracks in catalog.</span>';
   document.getElementById('pick-junctures').innerHTML=cache.junctures.map(x=>`<label><input type="checkbox" value="${x.id}">${esc(x.juncture_name)}</label>`).join('')||'<span class="muted">No junctures in catalog.</span>';
-  document.getElementById('m-role').innerHTML='<option value="">— none —</option>'+cache.roles.map(r=>`<option value="${r.id}">${esc(r.role_name)}</option>`).join('');
+  document.getElementById('pick-roles').innerHTML=cache.roles.map(r=>`<label><input type="checkbox" value="${r.id}">${esc(r.role_name)}</label>`).join('')||'<span class="muted">No roles in catalog.</span>';
 }
 const picked=(id)=>[...document.querySelectorAll('#'+id+' input:checked')].map(c=>c.value);
 async function loadTeam(){
-  let team=[]; try{ team=(await (await api('/admin/team')).json()).team||[]; }catch(e){ return showToast(e.message); }
+  let team=[], forms=[]; try{ const d=await (await api('/admin/team')).json(); team=d.team||[]; forms=d.forms||[]; }catch(e){ return showToast(e.message); }
   teamCache=team;
+  const formsHtml=forms.length?forms.map(f=>`<span class="chip">${esc(f.title||'(untitled)')}</span>`).join(''):'<span class="muted">—</span>';
   document.getElementById('team-count').textContent=team.length;
-  document.getElementById('team-list').innerHTML=team.length?`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Assigned</th><th></th></tr></thead><tbody>${
+  document.getElementById('team-list').innerHTML=team.length?`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Assigned</th><th>Forms</th><th></th></tr></thead><tbody>${
     team.map(m=>`<tr><td class="name-cell">${esc((m.fname||'')+' '+(m.lname||''))}</td><td>${esc(m.email)}</td>
-      <td>${m.role_name?`<span class="badge">${esc(m.role_name)}</span>`:'<span class="muted">—</span>'}</td>
-      <td>${optBadges(m.options)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openEditMember('${m.pum_id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmMember('${m.pum_id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
+      <td>${(m.roles&&m.roles.length)?m.roles.map(r=>`<span class="badge">${esc(r.name)}</span>`).join(' '):(m.role_name?`<span class="badge">${esc(m.role_name)}</span>`:'<span class="muted">—</span>')}</td>
+      <td>${optBadges(m.options)}</td><td>${formsHtml}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="issueLogin('${m.pum_id}')">Issue login</button> <button class="btn btn-ghost btn-sm" onclick="openEditMember('${m.pum_id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmMember('${m.pum_id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
     :`<div class="empty">No members yet.</div>`;
 }
 async function addMember(){
   const email=g('m-email'); if(!email) return showToast('Email is required.');
-  const body={ fname:g('m-fname'),lname:g('m-lname'),email,phone:g('m-phone')||undefined, role_uuid:g('m-role')||undefined, phases:picked('pick-phases'),tracks:picked('pick-tracks'),junctures:picked('pick-junctures') };
+  const body={ fname:g('m-fname'),lname:g('m-lname'),email,phone:g('m-phone')||undefined, role_uuids:picked('pick-roles'), phases:picked('pick-phases'),tracks:picked('pick-tracks'),junctures:picked('pick-junctures') };
   const btn=document.getElementById('m-btn'); btn.disabled=true; btn.textContent='Adding…';
-  try{ await create('team',body); ['m-fname','m-lname','m-email','m-phone'].forEach(i=>v(i,'')); v('m-role',''); document.querySelectorAll('#page-team .pick input:checked').forEach(c=>c.checked=false); loadTeam(); showToast('Member added.'); }
+  try{ const r=await create('team',body); ['m-fname','m-lname','m-email','m-phone'].forEach(i=>v(i,'')); document.querySelectorAll('#page-team .pick input:checked').forEach(c=>c.checked=false); loadTeam(); showToast('Member added.'); if(r&&r.login) showCredentials(r.login); }
   catch(e){ showToast(e.message); } finally { btn.disabled=false; btn.textContent='Add member to project'; }
 }
 async function rmMember(pumId){ try{ await del('team',pumId); loadTeam(); showToast('Member removed.'); }catch(e){ showToast(e.message); } }
@@ -575,11 +590,12 @@ function openEditMember(pum){
   const grp=(kind,box,nameField)=>{ const have=new Set(((m.options&&m.options[kind])||[]).map(o=>o.cat));
     document.getElementById(box).innerHTML=cache[kind+'s'].map(x=>`<label><input type="checkbox" value="${x.id}" ${have.has(x.id)?'checked':''}>${esc(x[nameField])}</label>`).join('')||'<span class="muted">None in catalog.</span>'; };
   grp('phase','em-phases','phase_name'); grp('track','em-tracks','track_name'); grp('juncture','em-junctures','juncture_name');
-  document.getElementById('em-role').innerHTML='<option value="">— none —</option>'+cache.roles.map(r=>`<option value="${r.id}" ${m.role_uuid===r.id?'selected':''}>${esc(r.role_name)}</option>`).join('');
+  const haveRoles=new Set((m.roles||[]).map(r=>r.id)); if(!haveRoles.size && m.role_uuid) haveRoles.add(m.role_uuid);
+  document.getElementById('em-roles').innerHTML=cache.roles.map(r=>`<label><input type="checkbox" value="${r.id}" ${haveRoles.has(r.id)?'checked':''}>${esc(r.role_name)}</label>`).join('')||'<span class="muted">No roles in catalog.</span>';
   openModal('modal-edit-member');
 }
 async function saveEditMember(){
-  const body={ role_uuid:g('em-role')||undefined, phases:picked('em-phases'), tracks:picked('em-tracks'), junctures:picked('em-junctures') };
+  const body={ role_uuids:picked('em-roles'), phases:picked('em-phases'), tracks:picked('em-tracks'), junctures:picked('em-junctures') };
   try{ await api('/admin/team/'+encodeURIComponent(editingPum),{method:'PUT',body:JSON.stringify(body)}); closeModal('modal-edit-member'); loadTeam(); showToast('Member updated.'); }catch(e){ showToast(e.message); }
 }
 
@@ -632,15 +648,26 @@ async function loadRoleTemplates(){
     const juncts=cache.junctures.map(x=>`<label><input type="checkbox" value="${x.id}" ${js.has(x.id)?'checked':''}>${esc(x.juncture_name)}</label>`).join('')||'<span class="muted">no junctures in catalog</span>';
     return `<div class="card"><div class="card-head"><h3>${esc(r.role_name)}</h3><button class="btn btn-primary btn-sm" onclick="saveRoleTemplate('${r.id}')">Save</button></div>
       <div class="card-body"><div class="field"><label>Tracks</label><div class="pick" id="rt-${r.id}-tracks">${tracks}</div></div>
-      <div class="field" style="margin-bottom:0"><label>Technology junctures</label><div class="pick" id="rt-${r.id}-junctures">${juncts}</div></div></div></div>`;
+      <div class="field"><label>Technology junctures</label><div class="pick" id="rt-${r.id}-junctures">${juncts}</div></div>
+      <div class="field" style="margin-bottom:0"><label>Example answer (shown to employees with this role)</label><textarea id="rt-${r.id}-example" rows="3" style="width:100%" placeholder="Write a model daily-log entry for this role…">${esc(t.example||'')}</textarea></div></div></div>`;
   }).join('');
 }
 async function saveRoleTemplate(roleId){
   const pick=(suffix)=>[...document.querySelectorAll('#rt-'+roleId+'-'+suffix+' input:checked')].map(c=>c.value);
-  try{ await api('/admin/role-templates/'+encodeURIComponent(roleId),{method:'PUT',body:JSON.stringify({tracks:pick('tracks'),junctures:pick('junctures')})}); showToast('Role template saved.'); }catch(e){ showToast(e.message); }
+  const ex=document.getElementById('rt-'+roleId+'-example'); const example=ex?ex.value.trim():'';
+  try{ await api('/admin/role-templates/'+encodeURIComponent(roleId),{method:'PUT',body:JSON.stringify({tracks:pick('tracks'),junctures:pick('junctures'),example})}); showToast('Role saved.'); }catch(e){ showToast(e.message); }
 }
 
 // ─── UTIL ───────────────────────────────────────────────────────────────────
+async function issueLogin(pumId){
+  if(!confirm('Create or reset this member’s personal-log login? Any existing password will be replaced.')) return;
+  try{ const d=await (await api('/admin/member-credentials',{method:'POST',body:JSON.stringify({pum_id:pumId})})).json(); showCredentials(d.login); }
+  catch(e){ showToast(e.message); }
+}
+function showCredentials(login){
+  if(!login||!login.email) return showToast('Login could not be created.');
+  window.prompt(`Personal-log login — share privately with the team member:\n\nSign in at: ${location.origin}/nett-log.html\nEmail: ${login.email}\n\nPassword (copy it now):`, login.password);
+}
 function showToast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3200); }
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }

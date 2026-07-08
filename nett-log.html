@@ -1,0 +1,151 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tower5 — Personal Log</title>
+<style>
+  :root{ --red:#c0392b; --red-dark:#a93226; --black:#1a1a1a; --surface:#fff; --surface2:#f7f7f8;
+         --border:#e3e3e6; --text:#222; --text-mid:#555; --text-muted:#888;
+         --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:var(--font); color:var(--text); background:var(--surface2); line-height:1.5; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 18px 60px; }
+  header{ background:var(--black); color:#fff; padding:18px 0; margin-bottom:22px; }
+  header .wrap{ display:flex; align-items:center; justify-content:space-between; padding-bottom:0; }
+  .brand{ display:flex; align-items:baseline; gap:14px; }
+  .logo{ font-size:22px; font-weight:800; letter-spacing:0.04em; color:var(--red); }
+  .sub{ font-size:12px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#bbb; }
+  .link{ background:none; border:none; color:#bbb; font-size:12px; cursor:pointer; font-family:var(--font); }
+  .link:hover{ color:#fff; }
+  h1{ font-size:20px; margin:0 0 2px; }
+  .who{ color:var(--text-mid); font-size:13px; margin-bottom:6px; }
+  .section-title{ font-size:12px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); margin:26px 0 10px; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:15px 17px; margin-bottom:12px; }
+  .card.reflect{ border-left:3px solid var(--red); }
+  .meta{ font-size:12px; color:var(--text-muted); display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:7px; }
+  .chip{ display:inline-block; background:#fdf1f0; color:var(--red-dark); border:1px solid rgba(192,57,43,.25); border-radius:20px; padding:1px 9px; font-size:11px; font-weight:600; }
+  .chip.n{ background:var(--surface2); color:var(--text-mid); border-color:var(--border); }
+  .body{ white-space:pre-wrap; font-size:14px; color:var(--text); }
+  textarea,input{ width:100%; padding:11px 13px; border:1px solid var(--border); border-radius:6px; font-family:var(--font); font-size:14px; }
+  textarea{ min-height:90px; resize:vertical; }
+  label{ display:block; font-size:12px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-muted); margin:0 0 6px; }
+  .btn{ background:var(--red); color:#fff; border:none; border-radius:6px; padding:10px 20px; font-weight:700; font-size:13px; cursor:pointer; font-family:var(--font); }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .hint{ background:#fdf7f0; border:1px solid #f0dfc8; border-radius:6px; padding:11px 14px; font-size:12.5px; color:#7a5b32; margin-bottom:12px; }
+  .empty{ color:var(--text-muted); font-size:13px; padding:14px 0; }
+  .err{ color:var(--red-dark); font-size:13px; margin-top:10px; min-height:16px; }
+  .login-card{ max-width:380px; margin:8vh auto 0; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:28px 26px; }
+  .login-card .logo{ font-size:24px; } .login-card .sub{ color:var(--text-muted); margin:2px 0 20px; }
+  .field{ margin-bottom:14px; }
+  a{ color:var(--red-dark); }
+  .hidden{ display:none; }
+</style>
+<header><div class="wrap">
+  <div class="brand"><span class="logo">TOWER5</span><span class="sub">Personal Log</span></div>
+  <button class="link hidden" id="logout-btn" onclick="logout()">Sign out</button>
+</div></header>
+
+<!-- LOGIN -->
+<div id="login-view">
+  <div class="login-card">
+    <div class="logo">TOWER5</div>
+    <div class="sub">Sign in to your personal log</div>
+    <div class="field"><label>Email</label><input id="li-email" type="email" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input id="li-pass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn" id="li-btn" style="width:100%" onclick="doLogin()">Sign in</button>
+    <div class="err" id="li-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="wrap hidden" id="app-view">
+  <div id="head"></div>
+  <div id="content"><div class="empty">Loading your log…</div></div>
+</div>
+
+<script>
+const INJECTED_API_BASE = '';
+const INJECTED_CLIENT_ID = '';
+const INJECTED_REGION = 'us-west-2';
+let API_BASE = INJECTED_API_BASE || localStorage.getItem('t5_api') || '';
+let CLIENT_ID = INJECTED_CLIENT_ID || localStorage.getItem('t5_client') || '';
+let REGION = INJECTED_REGION || localStorage.getItem('t5_region') || 'us-west-2';
+let idToken = localStorage.getItem('t5log_token') || '';
+
+const esc = (s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (d)=>{ if(!d) return ''; const t=new Date(d); return isNaN(t)?String(d).slice(0,16).replace('T',' '):t.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}); };
+const show=(id,on)=>document.getElementById(id).classList.toggle('hidden',!on);
+let STATE={ reflections:[], responses:[] };
+
+(function boot(){
+  if(idToken && Date.now()<Number(localStorage.getItem('t5log_exp')||0)) enterApp(); else showLogin();
+})();
+function showLogin(){ show('login-view',true); show('app-view',false); show('logout-btn',false); }
+
+async function doLogin(){
+  const email=document.getElementById('li-email').value.trim();
+  const password=document.getElementById('li-pass').value;
+  const err=document.getElementById('li-err'), btn=document.getElementById('li-btn'); err.textContent='';
+  if(!email||!password){ err.textContent='Enter your email and password.'; return; }
+  if(!CLIENT_ID){ err.textContent='This page is not configured (missing client id).'; return; }
+  btn.disabled=true; btn.textContent='Signing in…';
+  try{
+    const res=await fetch(`https://cognito-idp.${REGION}.amazonaws.com/`,{method:'POST',headers:{'Content-Type':'application/x-amz-json-1.1','X-Amz-Target':'AWSCognitoIdentityProviderService.InitiateAuth'},body:JSON.stringify({AuthFlow:'USER_PASSWORD_AUTH',ClientId:CLIENT_ID,AuthParameters:{USERNAME:email,PASSWORD:password}})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(pretty(data));
+    if(data.ChallengeName) throw new Error('This account needs a permanent password — ask your admin to reset it.');
+    const r=data.AuthenticationResult; idToken=r.IdToken;
+    localStorage.setItem('t5log_token',idToken); localStorage.setItem('t5log_exp',String(Date.now()+(r.ExpiresIn||3600)*1000));
+    enterApp();
+  }catch(e){ err.textContent=e.message; } finally { btn.disabled=false; btn.textContent='Sign in'; }
+}
+function pretty(d){ const t=(d.__type||'').split('#').pop(); if(t==='NotAuthorizedException') return 'Incorrect email or password.'; if(t==='UserNotFoundException') return 'No account for that email.'; return d.message||t||'Sign-in failed.'; }
+function logout(){ idToken=''; localStorage.removeItem('t5log_token'); localStorage.removeItem('t5log_exp'); showLogin(); }
+
+async function enterApp(){
+  show('login-view',false); show('app-view',true); show('logout-btn',true);
+  await load();
+}
+async function api(path,opts={}){
+  const res=await fetch(API_BASE+path,{...opts,headers:{'Content-Type':'application/json','Authorization':idToken,...(opts.headers||{})}});
+  if(res.status===401||res.status===403){ if(res.status===401){ logout(); throw new Error('Session expired — sign in again.'); } }
+  return res;
+}
+async function load(){
+  let d; try{ const r=await api('/log'); d=await r.json(); if(!r.ok) throw new Error(d.error||'Could not load your log.'); }
+  catch(e){ document.getElementById('content').innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
+  STATE.reflections=d.reflections||[]; STATE.responses=d.responses||[];
+  document.getElementById('head').innerHTML=`<h1>${esc((d.user&&d.user.name)||'Your log')}</h1><div class="who">${esc((d.user&&d.user.email)||'')} · showing the last ${d.windowDays||14} days</div>`;
+  render();
+}
+function render(){
+  const r=STATE.responses, refl=STATE.reflections;
+  document.getElementById('content').innerHTML=`
+    <div class="section-title">Reflection</div>
+    <div class="hint">Every couple of weeks, review your log below and reflect on what you've learned — what worked, what surprised you, what you'd do differently. This closes the learning loop.</div>
+    <div class="card reflect">
+      <textarea id="reflect-box" placeholder="What have you learned recently? Any patterns, insights, or lessons…"></textarea>
+      <button class="btn" id="reflect-btn" style="margin-top:10px" onclick="submitReflection()">Add reflection</button>
+    </div>
+    ${refl.length?refl.map(x=>`<div class="card reflect"><div class="meta">${esc(fmt(x.created_at))}</div><div class="body">${esc(x.body)}</div></div>`).join(''):'<div class="empty">No reflections in the last two weeks.</div>'}
+
+    <div class="section-title">Your log — ${r.length} response${r.length===1?'':'s'} (last 2 weeks)</div>
+    ${r.length?r.map(x=>`<div class="card">
+        <div class="meta"><strong>${esc(fmt(x.submitted_at))}</strong>
+          ${x.survey_title?`<span class="chip n">${esc(x.survey_title)}</span>`:''}
+          ${x.phase?`<span class="chip">${esc(x.phase)}</span>`:''}
+          ${x.track?`<span class="chip">${esc(x.track)}</span>`:''}
+          ${x.juncture?`<span class="chip">${esc(x.juncture)}</span>`:''}
+          ${(+x.asset_count)>0?`<span class="chip n">📎 ${x.asset_count}</span>`:''}</div>
+        <div class="body">${esc(x.description)}</div></div>`).join('')
+      :'<div class="empty">No responses in the last two weeks.</div>'}`;
+}
+async function submitReflection(){
+  const box=document.getElementById('reflect-box'), btn=document.getElementById('reflect-btn');
+  const body=(box.value||'').trim(); if(!body) return;
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const r=await api('/reflect',{method:'POST',body:JSON.stringify({body})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'Could not save.');
+    STATE.reflections.unshift(d.reflection); render();
+  }catch(e){ btn.disabled=false; btn.textContent='Add reflection'; alert(e.message); }
+}
+</script>

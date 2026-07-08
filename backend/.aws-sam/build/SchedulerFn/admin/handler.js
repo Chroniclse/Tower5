@@ -20,9 +20,34 @@ const {
   CognitoIdentityProviderClient, AdminCreateUserCommand,
   AdminSetUserPasswordCommand, AdminDeleteUserCommand,
 } = require('@aws-sdk/client-cognito-identity-provider');
+const { randomUUID } = require('crypto');
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.USER_POOL_ID;
+
+// Employee password convention: first + last name, lowercase, no spaces/punct.
+// (Pool policy is relaxed to permit this; min length is Cognito's floor of 6.)
+const employeePassword = (fname, lname) => `${fname || ''}${lname || ''}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Create (or reset) a Cognito 'employee' login for a team member and return the
+// credentials so the admin can share them. Idempotent — safe to re-issue.
+async function ensureEmployeeLogin(email, tenantId, fname, lname) {
+  const password = employeePassword(fname, lname);
+  if (password.length < 6) throw new Error(`Name too short for a password (needs 6+ chars): "${password}". Set one manually.`);
+  try {
+    await cognito.send(new AdminCreateUserCommand({
+      UserPoolId: USER_POOL_ID, Username: email, MessageAction: 'SUPPRESS',
+      UserAttributes: [
+        { Name: 'email', Value: email }, { Name: 'email_verified', Value: 'true' },
+        { Name: 'custom:role', Value: 'employee' }, { Name: 'custom:tenant_id', Value: tenantId },
+      ],
+    }));
+  } catch (e) {
+    if (e.name !== 'UsernameExistsException') throw e; // already exists → just (re)set the password
+  }
+  await cognito.send(new AdminSetUserPasswordCommand({ UserPoolId: USER_POOL_ID, Username: email, Password: password, Permanent: true }));
+  return { email, password };
+}
 
 // resource path segment → CRUD definition
 const RESOURCES = {
@@ -36,16 +61,6 @@ const RESOURCES = {
   'project-roles': makeCrud({
     table: 'project_roles_mapping',
     columns: ['project_uuid', 'roles_uuid'], uuidCols: ['project_uuid', 'roles_uuid'],
-  }),
-
-  // Global config
-  'tenant-feedback': makeCrud({
-    table: 'tenant_feedback', columns: ['schedule_send', 'schedule_resend', 'send_frequency'],
-    casts: { schedule_send: 'time', schedule_resend: 'time' },
-  }),
-  'track-schedule':  makeCrud({
-    table: 'track_schedule', columns: ['schedule_send', 'schedule_resend'],
-    casts: { schedule_send: 'time', schedule_resend: 'time' },
   }),
 
   // Tenant-scoped
@@ -101,7 +116,7 @@ const RESOURCES = {
 // Resources a TENANT admin may read but only a SUPER admin may write
 // (global building blocks + project creation + tenancy).
 const SUPER_WRITE_ONLY = new Set([
-  'tenants', 'roles', 'phases', 'tracks', 'junctures', 'tenant-feedback', 'track-schedule', 'projects',
+  'tenants', 'roles', 'phases', 'tracks', 'junctures', 'projects',
 ]);
 
 const forbidden = (msg) => { const e = new Error(msg); e.statusCode = 403; return e; };
@@ -162,6 +177,9 @@ exports.handler = async (event) => {
   try {
     if (method === 'OPTIONS') return json(200, {});
     const auth = authContext(event);
+    // Employees get a Cognito login too, but ONLY for their personal log (a
+    // separate service). They may not touch the admin console at all.
+    if (auth.role === 'employee') return json(403, { error: 'Employees may only view their personal log.' });
 
     const proxy = (event.pathParameters && event.pathParameters.proxy) ||
       (event.path || '').replace(/^\/admin\/?/, '');
@@ -195,6 +213,9 @@ exports.handler = async (event) => {
 
     // ── Team: add a member to a project + assign their options, atomically ────
     if (resource === 'team') return handleTeam(event, auth, allowed, method, id);
+
+    // ── (Re)issue a member's employee login for their personal log ────────────
+    if (resource === 'member-credentials' && method === 'POST') return handleMemberCredentials(event, auth, allowed);
 
     // ── Per-survey submission status (who submitted / who hasn't) ─────────────
     if (resource === 'survey-status' && method === 'GET') return surveyStatus(event, auth, allowed);
@@ -231,6 +252,7 @@ exports.handler = async (event) => {
         return respond(await repo.update(tenantId, id, parseBody(event), scope), 200, 404);
       case 'DELETE':
         if (!id) return json(400, { error: 'id required in path' });
+        if (CATALOG_CASCADE[resource]) return json(200, await cascadeDeleteCatalog(resource, id));
         return respond(await repo.remove(tenantId, id, scope), 200, 404);
       default:
         return json(405, { error: 'Method not allowed' });
@@ -244,6 +266,29 @@ exports.handler = async (event) => {
 
 const respond = (row, okStatus, missStatus) =>
   row ? json(okStatus, row) : json(missStatus, { error: 'Not found' });
+
+// Catalog items (phases/tracks/junctures) are referenced by project↔catalog
+// mapping rows with ON DELETE RESTRICT, so a plain delete fails once anything
+// uses them. Safe-delete cascades: drop the per-user options and role-template
+// rows that point at the item (neither has an FK, so they must go manually),
+// then the mappings (survey_form self-heals via SET NULL, user_phase_mapping
+// via CASCADE), then the catalog row itself.
+const CATALOG_CASCADE = {
+  phases:    { mapTable: 'project_phase_mapping',             col: 'project_phases_uuid',    kind: 'phase',    catalog: 'project_phases' },
+  tracks:    { mapTable: 'project_track_mapping',             col: 'project_tracks_uuid',    kind: 'track',    catalog: 'project_tracks' },
+  junctures: { mapTable: 'project_priority_juncture_mapping', col: 'project_junctures_uuid', kind: 'juncture', catalog: 'project_priority_junctures' },
+};
+
+async function cascadeDeleteCatalog(resource, id) {
+  const c = CATALOG_CASCADE[resource];
+  await transaction(async (q) => {
+    await q(`delete from user_option where kind = :k and mapping_uuid in (select id from ${c.mapTable} where ${c.col} = :id::uuid)`, { k: c.kind, id });
+    if (resource !== 'phases') await q(`delete from role_template where kind = :k and catalog_uuid = :id::uuid`, { k: c.kind, id });
+    await q(`delete from ${c.mapTable} where ${c.col} = :id::uuid`, { id });
+    await q(`delete from ${c.catalog} where id = :id::uuid`, { id });
+  });
+  return { id, deleted: true };
+}
 
 // ── /admin/me — role + the projects this admin may act on ───────────────────
 async function whoami(event, auth) {
@@ -349,6 +394,34 @@ async function roleTemplate(tenantId, projectId, roleId) {
 
 // Upsert the project_*_mapping for each catalog id, then attach it to the
 // project-user via user_option. Runs inside a transaction `q`.
+// A member can hold several roles. Accept either role_uuids[] or a single
+// role_uuid (back-compat), de-duped.
+const roleIdsOf = (b) => uniq((Array.isArray(b.role_uuids) ? b.role_uuids : (b.role_uuid ? [b.role_uuid] : [])).filter(Boolean));
+
+// Union the template tracks/junctures across all of a member's roles.
+async function roleTemplatesUnion(tenantId, projectId, roleIds) {
+  const out = { tracks: [], junctures: [] };
+  for (const r of roleIds) {
+    const t = await roleTemplate(tenantId, projectId, r);
+    out.tracks.push(...t.tracks); out.junctures.push(...t.junctures);
+  }
+  return { tracks: uniq(out.tracks), junctures: uniq(out.junctures) };
+}
+
+// Replace a member's role set: (project↔role mapping upsert) → (member↔role rows).
+async function syncMemberRoles(q, tenantId, projectId, pumId, roleIds) {
+  await q(`delete from project_user_role_mapping where project_user_mapping_uuid = :pum::uuid and tenant_id = :t::uuid`, { pum: pumId, t: tenantId });
+  for (const roleId of roleIds) {
+    const [prm] = await q(
+      `insert into project_roles_mapping (project_uuid, roles_uuid) values (:p::uuid, :r::uuid)
+       on conflict (project_uuid, roles_uuid) do update set project_uuid = excluded.project_uuid returning id`,
+      { p: projectId, r: roleId });
+    await q(`insert into project_user_role_mapping (tenant_id, project_user_mapping_uuid, project_roles_mapping_uuid)
+             values (:t::uuid, :pum::uuid, :prm::uuid)`,
+      { t: tenantId, pum: pumId, prm: prm.id });
+  }
+}
+
 async function assignOptions(q, tenantId, projectId, pumId, sets) {
   const upsertMapping = async (table, fk, catId) => {
     const [r] = await q(
@@ -404,8 +477,25 @@ async function handleTeam(event, auth, allowed, method, id) {
       const byPum = {};
       members.forEach((m) => { byPum[m.pum_id] = { phase: [], track: [], juncture: [] }; m.options = byPum[m.pum_id]; });
       for (const o of opts) { if (byPum[o.pum] && byPum[o.pum][o.kind]) byPum[o.pum][o.kind].push({ name: o.name, cat: o.cat }); }
+
+      // Each member's role set (many-to-many via project_user_role_mapping).
+      const roleRows = await rows(
+        `select purm.project_user_mapping_uuid as pum, r.id as role_id, r.role_name
+           from project_user_role_mapping purm
+           join project_roles_mapping prm on prm.id = purm.project_roles_mapping_uuid
+           join roles r on r.id = prm.roles_uuid
+          where purm.tenant_id = :t::uuid and purm.is_deleted = false
+            and purm.project_user_mapping_uuid in (${ph})`, op);
+      const rolesByPum = {};
+      members.forEach((m) => { m.roles = []; rolesByPum[m.pum_id] = m; });
+      for (const rr of roleRows) { if (rolesByPum[rr.pum]) rolesByPum[rr.pum].roles.push({ id: rr.role_id, name: rr.role_name }); }
     }
-    return json(200, { team: members });
+    // Surveys are project-level, so every member is assigned the project's forms.
+    const forms = await rows(
+      `select id, title, feedback_type from surveys
+        where tenant_id = :t::uuid and project_uuid = :p::uuid order by created_at desc`,
+      { t: tenantId, p: projectId });
+    return json(200, { team: members, forms });
   }
 
   if (method === 'POST') {
@@ -414,17 +504,22 @@ async function handleTeam(event, auth, allowed, method, id) {
     if (!projectId) return json(400, { error: 'No project in scope.' });
     if (allowed !== null && !allowed.includes(projectId)) return json(403, { error: 'Project outside your scope.' });
     if (!b.email) return json(400, { error: 'Email is required.' });
-    const tpl = await roleTemplate(tenantId, projectId, b.role_uuid);
+    const roleIds = roleIdsOf(b);
+    const tpl = await roleTemplatesUnion(tenantId, projectId, roleIds);
     const sets = { phases: b.phases || [], tracks: uniq([...(b.tracks || []), ...tpl.tracks]), junctures: uniq([...(b.junctures || []), ...tpl.junctures]) };
     const result = await transaction(async (q) => {
       const [u] = await q(`insert into users (tenant_id, email, fname, lname, phone) values (:t::uuid,:e,:f,:l,:p) returning id`,
         { t: tenantId, e: b.email, f: b.fname || null, l: b.lname || null, p: b.phone || null });
       const [pum] = await q(`insert into project_user_mapping (tenant_id, user_uuid, project_uuid, role_uuid) values (:t::uuid,:u::uuid,:p::uuid,:r::uuid) returning id`,
-        { t: tenantId, u: u.id, p: projectId, r: b.role_uuid || null });
+        { t: tenantId, u: u.id, p: projectId, r: roleIds[0] || null }); // role_uuid = primary role (back-compat/fallback)
       await assignOptions(q, tenantId, projectId, pum.id, sets);
+      await syncMemberRoles(q, tenantId, projectId, pum.id, roleIds);
       return { user_id: u.id, pum_id: pum.id };
     });
-    return json(201, result);
+    // Give the new member a Cognito login for their personal log.
+    let login = null;
+    try { login = await ensureEmployeeLogin(b.email, tenantId, b.fname, b.lname); } catch (e) { console.error('employee login:', e.message); }
+    return json(201, { ...result, login });
   }
 
   // Reconfigure an existing member's options (replace the set).
@@ -433,12 +528,14 @@ async function handleTeam(event, auth, allowed, method, id) {
     const m = await one(`select project_uuid from project_user_mapping where id = :id::uuid and tenant_id = :t::uuid`, { id, t: tenantId });
     if (!m) return json(404, { error: 'Not found' });
     if (allowed !== null && !allowed.includes(m.project_uuid)) return json(403, { error: 'Outside your scope.' });
-    const tpl = await roleTemplate(tenantId, m.project_uuid, b.role_uuid);
+    const roleIds = roleIdsOf(b);
+    const tpl = await roleTemplatesUnion(tenantId, m.project_uuid, roleIds);
     const sets = { phases: b.phases || [], tracks: uniq([...(b.tracks || []), ...tpl.tracks]), junctures: uniq([...(b.junctures || []), ...tpl.junctures]) };
     await transaction(async (q) => {
-      await q(`update project_user_mapping set role_uuid = :r::uuid where id = :id::uuid and tenant_id = :t::uuid`, { r: b.role_uuid || null, id, t: tenantId });
+      await q(`update project_user_mapping set role_uuid = :r::uuid where id = :id::uuid and tenant_id = :t::uuid`, { r: roleIds[0] || null, id, t: tenantId });
       await q(`delete from user_option where project_user_mapping_uuid = :pum::uuid and tenant_id = :t::uuid`, { pum: id, t: tenantId });
       await assignOptions(q, tenantId, m.project_uuid, id, sets);
+      await syncMemberRoles(q, tenantId, m.project_uuid, id, roleIds);
     });
     return json(200, { ok: true });
   }
@@ -484,6 +581,22 @@ async function surveyStatus(event, auth, allowed) {
   return json(200, { members, submitted, total: members.length, dates: dates.map((x) => x.d) });
 }
 
+// ── POST /admin/member-credentials { pum_id } — (re)issue an employee login ──
+async function handleMemberCredentials(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  const b = parseBody(event);
+  const m = await one(
+    `select u.email, u.fname, u.lname, pum.project_uuid from project_user_mapping pum join users u on u.id = pum.user_uuid
+      where pum.id = :id::uuid and pum.tenant_id = :t::uuid`, { id: b.pum_id, t: tenantId });
+  if (!m) return json(404, { error: 'Member not found.' });
+  if (allowed !== null && !allowed.includes(m.project_uuid)) return json(403, { error: 'Outside your scope.' });
+  try {
+    const login = await ensureEmployeeLogin(m.email, tenantId, m.fname, m.lname);
+    return json(200, { login });
+  } catch (e) { return json(400, { error: e.message }); }
+}
+
 // ── /admin/role-templates — tenant admin sets per-role default tracks/junctures
 async function handleRoleTemplates(event, auth, allowed, method, id) {
   const tenantId = tenantOf(event, auth);
@@ -493,17 +606,23 @@ async function handleRoleTemplates(event, auth, allowed, method, id) {
   if (method === 'GET') {
     const r = await rows(`select role_uuid, kind, catalog_uuid from role_template where tenant_id = :t::uuid and project_uuid = :p::uuid`, { t: tenantId, p: projectId });
     const map = {};
-    for (const x of r) { const m = (map[x.role_uuid] || (map[x.role_uuid] = { role_uuid: x.role_uuid, tracks: [], junctures: [] })); (x.kind === 'track' ? m.tracks : m.junctures).push(x.catalog_uuid); }
+    const ensure = (rid) => (map[rid] || (map[rid] = { role_uuid: rid, tracks: [], junctures: [], example: '' }));
+    for (const x of r) { const m = ensure(x.role_uuid); (x.kind === 'track' ? m.tracks : m.junctures).push(x.catalog_uuid); }
+    const ex = await rows(`select role_uuid, example_text from role_examples where tenant_id = :t::uuid and project_uuid = :p::uuid`, { t: tenantId, p: projectId });
+    for (const x of ex) ensure(x.role_uuid).example = x.example_text || '';
     return json(200, { templates: Object.values(map) });
   }
   if ((method === 'PUT' || method === 'PATCH') && id) {   // id = role_uuid
     const b = parseBody(event);
     const tracks = Array.isArray(b.tracks) ? b.tracks : [];
     const junctures = Array.isArray(b.junctures) ? b.junctures : [];
+    const example = typeof b.example === 'string' ? b.example.trim() : '';
     await transaction(async (qx) => {
       await qx(`delete from role_template where tenant_id = :t::uuid and project_uuid = :p::uuid and role_uuid = :r::uuid`, { t: tenantId, p: projectId, r: id });
       for (const c of tracks) await qx(`insert into role_template (tenant_id, project_uuid, role_uuid, kind, catalog_uuid) values (:t::uuid,:p::uuid,:r::uuid,'track',:c::uuid) on conflict (project_uuid, role_uuid, kind, catalog_uuid) do nothing`, { t: tenantId, p: projectId, r: id, c });
       for (const c of junctures) await qx(`insert into role_template (tenant_id, project_uuid, role_uuid, kind, catalog_uuid) values (:t::uuid,:p::uuid,:r::uuid,'juncture',:c::uuid) on conflict (project_uuid, role_uuid, kind, catalog_uuid) do nothing`, { t: tenantId, p: projectId, r: id, c });
+      await qx(`delete from role_examples where tenant_id = :t::uuid and project_uuid = :p::uuid and role_uuid = :r::uuid`, { t: tenantId, p: projectId, r: id });
+      if (example) await qx(`insert into role_examples (tenant_id, project_uuid, role_uuid, example_text) values (:t::uuid,:p::uuid,:r::uuid,:ex)`, { t: tenantId, p: projectId, r: id, ex: example });
     });
     return json(200, { ok: true });
   }
@@ -585,6 +704,9 @@ async function queryHandler(event, auth, allowed) {
   if (q.project_id) { where.push('s.project_uuid = :pid::uuid'); params.pid = q.project_id; }
   if (q.feedback_type) { where.push('s.feedback_type = :ft::survey_feedback_type'); params.ft = q.feedback_type; }
   if (q.juncture) { where.push('jn.juncture_name = :jn'); params.jn = q.juncture; }
+  if (q.phase) { where.push('ph.phase_name = :phn'); params.phn = q.phase; }
+  if (q.track) { where.push('tr.track_name = :trn'); params.trn = q.track; }
+  if (q.member) { where.push("(u.email ilike :mem or coalesce(u.fname,'') || ' ' || coalesce(u.lname,'') ilike :mem)"); params.mem = `%${q.member}%`; }
   if (q.from) { where.push('sf.submitted_at >= :from::timestamptz'); params.from = q.from; }
   if (q.to) { where.push('sf.submitted_at <= :to::timestamptz'); params.to = q.to; }
   if (q.q) { where.push('sf.description ilike :search'); params.search = `%${q.q}%`; }

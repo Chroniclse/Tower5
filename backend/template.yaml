@@ -260,11 +260,13 @@ Resources:
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: true   # provisioned admins only — no public signup
       Policies:
+        # Relaxed so employee logins can use the "firstnamelastname" (lowercase)
+        # convention. NOTE: this policy is pool-wide and also applies to admins.
         PasswordPolicy:
-          MinimumLength: 8
-          RequireUppercase: true
-          RequireLowercase: true
-          RequireNumbers: true
+          MinimumLength: 6            # Cognito's hard floor; name combos shorter than this can't be used
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
           RequireSymbols: false
       Schema:
         - { Name: tenant_id, AttributeDataType: String, Mutable: true, StringAttributeConstraints: { MaxLength: "64" } }
@@ -289,7 +291,7 @@ Resources:
     Properties:
       StageName: !Ref Stage
       Cors:
-        AllowMethods: "'GET,POST,DELETE,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization,x-tenant-id'"
         AllowOrigin: "'*'"
       Auth:
@@ -351,6 +353,12 @@ Resources:
         Transcribe:
           Type: Api
           Properties: { RestApiId: !Ref Api, Path: /transcribe, Method: any }
+        PersonalLog:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /log, Method: get, Auth: { Authorizer: CognitoAuth } }
+        Reflect:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /reflect, Method: post, Auth: { Authorizer: CognitoAuth } }
 
   # ── Admin service: API-key protected. Proxy route → in-code resource router ─
   AdminFn:

@@ -40,6 +40,8 @@ exports.handler = async (event) => {
       if (method === 'GET') return transcribeResult(event);
     }
     if (method === 'POST' && path.includes('/submit')) return submit(event);
+    if (method === 'GET' && path.includes('/log')) return personalLog(event);
+    if (method === 'POST' && path.includes('/reflect')) return addReflection(event);
     return json(404, { error: 'Not found' });
   } catch (err) {
     console.error(err);
@@ -181,17 +183,17 @@ async function optionsForUser(pumId) {
 }
 
 // The example shown for the employee's role on this project ("see example for
-// your role"). Returns '' until per-role examples are configured (Stage 3).
+// your role"). Set per (project, role) by the tenant admin in the Roles tab.
 async function exampleForUser(projectUserMappingId) {
   const r = await one(
     `select e.example_text
        from project_user_role_mapping purm
        join project_roles_mapping prm on prm.id = purm.project_roles_mapping_uuid
-       join role_examples e on e.role_uuid = prm.roles_uuid
+       join role_examples e on e.role_uuid = prm.roles_uuid and e.project_uuid = prm.project_uuid
       where purm.project_user_mapping_uuid = :pum::uuid and coalesce(purm.is_deleted,false) = false
       order by e.created_at desc limit 1`,
     { pum: projectUserMappingId }
-  ).catch(() => null); // role_examples table may not exist yet
+  ).catch(() => null);
   return (r && r.example_text) || '';
 }
 
@@ -225,6 +227,73 @@ async function getForm(event) {
     options,
     example,
   });
+}
+
+// ── Personal Log ────────────────────────────────────────────────────────────
+// Authenticated by a Cognito 'employee' login (not a magic link). The caller's
+// identity comes from the verified JWT, so a person can only ever see their own
+// data — the email/tenant are taken from the token, never from the request body.
+const empClaims = (event) => (event.requestContext && event.requestContext.authorizer && event.requestContext.authorizer.claims) || {};
+
+// Resolve the signed-in employee to their users row (email is unique per tenant).
+async function employeeUser(event) {
+  const c = empClaims(event);
+  const email = c.email;
+  const tenantId = c['custom:tenant_id'];
+  if (!email || !tenantId) return null;
+  const user = await one(`select id, fname, lname, email from users where email = :e and tenant_id = :t::uuid`, { e: email, t: tenantId });
+  return user ? { ...user, tenantId } : null;
+}
+
+// GET /log — the signed-in person's OWN responses + reflections, last 14 days.
+async function personalLog(event) {
+  const me = await employeeUser(event);
+  if (!me) return json(403, { error: 'No personal log is associated with this account.' });
+
+  const responses = await rows(
+    `select sf.id, sf.submitted_at, sf.description, s.title as survey_title, s.feedback_type,
+            ph.phase_name as phase, tr.track_name as track, jn.juncture_name as juncture,
+            (select count(*) from digital_assets da where da.survey_form_uuid = sf.id) as asset_count
+       from survey_form sf
+       join surveys s on s.id = sf.survey_uuid
+       join project_user_mapping pum on pum.id = sf.project_user_mapping_uuid
+       left join project_phase_mapping phm on phm.id = sf.project_phase_mapping_uuid
+       left join project_phases ph on ph.id = phm.project_phases_uuid
+       left join project_track_mapping tm on tm.id = sf.project_track_mapping_uuid
+       left join project_tracks tr on tr.id = tm.project_tracks_uuid
+       left join project_priority_juncture_mapping jm on jm.id = sf.project_priority_juncture_mapping_uuid
+       left join project_priority_junctures jn on jn.id = jm.project_junctures_uuid
+      where pum.user_uuid = :uid::uuid and pum.tenant_id = :t::uuid
+        and sf.submitted_at >= now() - interval '14 days'
+      order by sf.submitted_at desc`,
+    { uid: me.id, t: me.tenantId });
+
+  const reflections = await rows(
+    `select id, body, created_at from personal_reflection
+      where user_uuid = :uid::uuid and tenant_id = :t::uuid
+        and created_at >= now() - interval '14 days'
+      order by created_at desc`,
+    { uid: me.id, t: me.tenantId });
+
+  return json(200, {
+    user: { name: `${me.fname || ''} ${me.lname || ''}`.trim(), email: me.email },
+    windowDays: 14,
+    responses,
+    reflections,
+  });
+}
+
+// POST /reflect { body } — append a reflection to the signed-in person's log.
+async function addReflection(event) {
+  const me = await employeeUser(event);
+  if (!me) return json(403, { error: 'No personal log is associated with this account.' });
+  const text = (parseBody(event).body || '').trim();
+  if (!text) return json(400, { error: 'Reflection text is required.' });
+  const row = await one(
+    `insert into personal_reflection (tenant_id, user_uuid, body)
+     values (:t::uuid, :uid::uuid, :b) returning id, body, created_at`,
+    { t: me.tenantId, uid: me.id, b: text });
+  return json(201, { reflection: row });
 }
 
 async function submit(event) {

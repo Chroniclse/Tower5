@@ -153,6 +153,7 @@ let EXAMPLE = '';
 
 let activityCount = 0;
 const fileAssets = {};                 // n -> [ {asset_type,bucket_name,file_name,original} ]
+const linkAssets = {};                 // n -> [ url strings ]
 let recordingN = null, mediaRecorder = null, recStream = null, recChunks = [];
 
 // ── INIT ────────────────────────────────────────────────────────────────────
@@ -185,7 +186,7 @@ function buildSelect(key, id, label) {
   return `<div><label>${label}</label><select id="${id}"><option value="">— Select —</option>${opts}</select></div>`;
 }
 function addActivity() {
-  activityCount++; const n = activityCount; fileAssets[n] = [];
+  activityCount++; const n = activityCount; fileAssets[n] = []; linkAssets[n] = [];
   const isFirst = document.querySelectorAll('.activity-card').length === 0;
   const card = document.createElement('div');
   card.className = 'activity-card'; card.id = `activity-${n}`;
@@ -199,7 +200,7 @@ function addActivity() {
         ${buildSelect('priority',`juncture-${n}`,'Technology Juncture')}
       </div>
       <button class="example-toggle" onclick="toggleExample(${n})"><span id="ex-arrow-${n}">▶</span> See example for your role</button>
-      <div class="example-block" id="example-${n}">${EXAMPLE ? escapeHtml(EXAMPLE) : 'Examples for your role are coming soon.'}</div>
+      <div class="example-block" id="example-${n}">${EXAMPLE ? escapeHtml(EXAMPLE) : 'No example has been set for your role yet.'}</div>
       <label>Activity description</label>
       <textarea class="response-textarea" id="response-${n}" placeholder="Describe what you worked on…"></textarea>
       <div class="prompt-hint">Try to address:
@@ -215,12 +216,31 @@ function addActivity() {
         <span class="file-status" id="file-status-${n}"></span>
         <div class="file-list" id="file-list-${n}"></div>
       </div>
+      <div class="file-row">
+        <input type="url" id="link-${n}" placeholder="https://… (paste a link)" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter'){event.preventDefault();addLink(${n});}">
+        <button type="button" class="file-btn" onclick="addLink(${n})">🔗 Add link</button>
+        <div class="file-list" id="link-list-${n}"></div>
+      </div>
     </div>`;
   document.getElementById('activities-container').appendChild(card);
   renumber();
   if (!isFirst) card.scrollIntoView({ behavior:'smooth', block:'center' });
 }
-function removeActivity(n){ if(recordingN===n) stopRecording(); const c=document.getElementById(`activity-${n}`); if(c) c.remove(); delete fileAssets[n]; renumber(); }
+function removeActivity(n){ if(recordingN===n) stopRecording(); const c=document.getElementById(`activity-${n}`); if(c) c.remove(); delete fileAssets[n]; delete linkAssets[n]; renumber(); }
+// ── LINKS (multiple per activity) ────────────────────────────────────────────
+function addLink(n){
+  const inp=document.getElementById(`link-${n}`); if(!inp) return;
+  let u=(inp.value||'').trim(); if(!u) return;
+  if(!/^https?:\/\//i.test(u)) u='https://'+u;               // be forgiving about the scheme
+  try{ new URL(u); }catch{ return showToast('That doesn’t look like a valid link.'); }
+  (linkAssets[n]=linkAssets[n]||[]).push(u); inp.value=''; renderLinkList(n);
+}
+function removeLink(n,i){ if(linkAssets[n]){ linkAssets[n].splice(i,1); renderLinkList(n); } }
+function renderLinkList(n){
+  const box=document.getElementById(`link-list-${n}`); if(!box) return;
+  const links=linkAssets[n]||[];
+  box.innerHTML=links.map((u,i)=>`<div class="file-item"><span>🔗 <a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u.length>48?u.slice(0,48)+'…':u)}</a></span><button type="button" class="file-remove" onclick="removeLink(${n},${i})">×</button></div>`).join('');
+}
 function renumber(){ document.querySelectorAll('.activity-card .activity-number').forEach((el,i)=>el.textContent=`Activity ${i+1}`); }
 function toggleExample(n){ const b=document.getElementById(`example-${n}`), a=document.getElementById(`ex-arrow-${n}`); b.classList.toggle('visible'); a.textContent=b.classList.contains('visible')?'▼':'▶'; }
 
@@ -296,6 +316,7 @@ async function submitForm(){
     const description=(document.getElementById(`response-${n}`)?.value||'').trim();
     if(!description){ blank=true; showToast(`Please fill in the description for Activity ${i+1}.`); return; }
     const assets=(fileAssets[n]||[]).filter(a=>!a.preview).map(a=>({asset_type:'file',bucket_name:a.bucket_name,file_name:a.file_name}));
+    (linkAssets[n]||[]).forEach(u=>assets.push({asset_type:'url',url:u}));
     reports.push({ description, assets,
       project_phase_mapping_uuid: document.getElementById(`phase-${n}`)?.value || undefined,
       project_track_mapping_uuid: document.getElementById(`track-${n}`)?.value || undefined,

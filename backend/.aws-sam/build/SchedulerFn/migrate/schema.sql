@@ -8,9 +8,6 @@
 --                  Shared across all tenants. No tenant_id.
 --   Tenant       — per-customer data. Carries tenant_id and is isolated per
 --                  tenant (shared-schema, row-level multi-tenancy).
---   Global Config— platform-wide configuration (no tenant_id). See note on
---                  tenant_feedback / track_schedule below if you want these
---                  to be per-tenant instead.
 --
 -- Conventions applied across the board:
 --   * uuid primary keys, defaulted with gen_random_uuid()
@@ -109,30 +106,13 @@ CREATE INDEX IF NOT EXISTS ix_project_roles_mapping_project ON project_roles_map
 CREATE INDEX IF NOT EXISTS ix_project_roles_mapping_role    ON project_roles_mapping (roles_uuid);
 
 -- ============================================================================
--- Global Config (platform-wide — no tenant_id, per the diagram's yellow boxes)
--- NOTE: if these should be configurable per tenant, add
---       `tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE`
---       to each and a corresponding index.
+-- Deprecated Global Config tables (removed)
+-- The diagram's tenant_feedback / track_schedule scheduling was superseded by
+-- per-survey scheduling on `surveys` (send_days / send_time / resend_time),
+-- read by the scheduler. Drop the unused tables so they don't linger.
 -- ============================================================================
-
--- Survey send/resend cadence + frequency.
-CREATE TABLE IF NOT EXISTS tenant_feedback (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  schedule_send   time,            -- time of day to send
-  schedule_resend time,            -- time of day to resend
-  send_frequency  text,            -- e.g. 'daily', 'weekly' (free-form in diagram)
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now()
-);
-
--- Per-track send/resend timing.
-CREATE TABLE IF NOT EXISTS track_schedule (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  schedule_send   time,
-  schedule_resend time,
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now()
-);
+DROP TABLE IF EXISTS tenant_feedback;
+DROP TABLE IF EXISTS track_schedule;
 
 -- ============================================================================
 -- Tenant data (carries tenant_id; isolated per customer)
@@ -166,6 +146,10 @@ CREATE TABLE IF NOT EXISTS project_user_mapping (
   UNIQUE (tenant_id, user_uuid, project_uuid)
 );
 ALTER TABLE project_user_mapping ADD COLUMN IF NOT EXISTS role_uuid uuid REFERENCES roles(id) ON DELETE SET NULL;
+-- Personal Log is accessed via a Cognito 'employee' login (not a persistent
+-- link), so the old per-person token is retired.
+DROP INDEX IF EXISTS uq_pum_personal_token;
+ALTER TABLE project_user_mapping DROP COLUMN IF EXISTS personal_token;
 CREATE INDEX IF NOT EXISTS ix_project_user_mapping_tenant  ON project_user_mapping (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_project_user_mapping_user    ON project_user_mapping (user_uuid);
 CREATE INDEX IF NOT EXISTS ix_project_user_mapping_project ON project_user_mapping (project_uuid);
@@ -313,6 +297,25 @@ CREATE INDEX IF NOT EXISTS ix_survey_form_tenant ON survey_form (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_survey_form_survey ON survey_form (survey_uuid);
 CREATE INDEX IF NOT EXISTS ix_survey_form_pum    ON survey_form (project_user_mapping_uuid);
 
+-- Personal Log reflections: periodic free-form notes a person appends when
+-- reviewing their own log (the bi-weekly "close the learning loop" step).
+CREATE TABLE IF NOT EXISTS personal_reflection (
+  id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                 uuid NOT NULL REFERENCES tenants(id)     ON DELETE CASCADE,
+  user_uuid                 uuid REFERENCES users(id)               ON DELETE CASCADE,
+  project_user_mapping_uuid uuid REFERENCES project_user_mapping(id) ON DELETE CASCADE,
+  body                      text NOT NULL,
+  created_at                timestamptz NOT NULL DEFAULT now(),
+  updated_at                timestamptz NOT NULL DEFAULT now()
+);
+-- Reflections are keyed to the person (Cognito login → users row), not a single
+-- project-user mapping; upgrade older rows.
+ALTER TABLE personal_reflection ADD COLUMN IF NOT EXISTS user_uuid uuid REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE personal_reflection ALTER COLUMN project_user_mapping_uuid DROP NOT NULL;
+UPDATE personal_reflection pr SET user_uuid = pum.user_uuid
+  FROM project_user_mapping pum WHERE pr.project_user_mapping_uuid = pum.id AND pr.user_uuid IS NULL;
+CREATE INDEX IF NOT EXISTS ix_personal_reflection_user ON personal_reflection (user_uuid);
+
 -- Files / audio / urls attached to a submitted form.
 CREATE TABLE IF NOT EXISTS digital_assets (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -396,6 +399,19 @@ CREATE TABLE IF NOT EXISTS role_template (
 );
 CREATE INDEX IF NOT EXISTS ix_role_template_pr ON role_template (project_uuid, role_uuid);
 
+-- Per-(project, role) model answer shown to employees ("see example for your role").
+CREATE TABLE IF NOT EXISTS role_examples (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id)  ON DELETE CASCADE,
+  project_uuid uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  role_uuid    uuid NOT NULL REFERENCES roles(id)    ON DELETE CASCADE,
+  example_text text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_uuid, role_uuid)
+);
+CREATE INDEX IF NOT EXISTS ix_role_examples_role ON role_examples (project_uuid, role_uuid);
+
 -- ============================================================================
 -- Attach updated_at triggers to every table
 -- ============================================================================
@@ -404,11 +420,11 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'tenants','roles','projects','project_phases','project_tracks',
-    'project_priority_junctures','project_roles_mapping','tenant_feedback',
-    'track_schedule','users','project_user_mapping','project_user_role_mapping',
+    'project_priority_junctures','project_roles_mapping',
+    'users','project_user_mapping','project_user_role_mapping',
     'project_phase_mapping','project_track_mapping',
     'project_priority_juncture_mapping','user_phase_mapping','survey_token',
-    'surveys','survey_form','digital_assets','admin_project_mapping','user_option','role_template'
+    'surveys','survey_form','digital_assets','admin_project_mapping','user_option','role_template','role_examples','personal_reflection'
   ]
   LOOP
     EXECUTE format(

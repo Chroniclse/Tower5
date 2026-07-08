@@ -54,6 +54,14 @@ Globals:
           Fn::GetAtt:
           - DbCluster
           - MasterUserSecret.SecretArn
+        DB_HOST:
+          Fn::GetAtt:
+          - DbCluster
+          - Endpoint.Address
+        DB_PORT:
+          Fn::GetAtt:
+          - DbCluster
+          - Endpoint.Port
         DB_NAME: tower5
 Conditions:
   HasAppBaseUrl:
@@ -126,6 +134,103 @@ Resources:
         Ref: DbCluster
       DBInstanceClass: db.serverless
       Engine: aurora-postgresql
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Tower5 Lambda SG - allow all outbound (no inbound)
+      VpcId:
+        Ref: DbVpc
+  DbIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Ref: DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId:
+        Ref: LambdaSecurityGroup
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: DbVpc
+      InternetGatewayId:
+        Ref: InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: DbVpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      MapPublicIpOnLaunch: true
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DbVpc
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: InternetGateway
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NatEip
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: DbVpc
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NatGateway
+  PrivateSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      SubnetId:
+        Ref: DbSubnetA
+  PrivateSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      SubnetId:
+        Ref: DbSubnetB
   MigrateFn:
     Type: AWS::Serverless::Function
     Properties:
@@ -177,10 +282,10 @@ Resources:
         AllowAdminCreateUserOnly: true
       Policies:
         PasswordPolicy:
-          MinimumLength: 8
-          RequireUppercase: true
-          RequireLowercase: true
-          RequireNumbers: true
+          MinimumLength: 6
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
           RequireSymbols: false
       Schema:
       - Name: tenant_id
@@ -215,7 +320,7 @@ Resources:
       StageName:
         Ref: Stage
       Cors:
-        AllowMethods: '''GET,POST,DELETE,OPTIONS'''
+        AllowMethods: '''GET,POST,PUT,PATCH,DELETE,OPTIONS'''
         AllowHeaders: '''Content-Type,Authorization,x-tenant-id'''
         AllowOrigin: '''*'''
       Auth:
@@ -230,6 +335,12 @@ Resources:
     Properties:
       Handler: employee/handler.handler
       CodeUri: EmployeeFn
+      VpcConfig:
+        SubnetIds:
+        - Ref: DbSubnetA
+        - Ref: DbSubnetB
+        SecurityGroupIds:
+        - Ref: LambdaSecurityGroup
       Environment:
         Variables:
           UPLOADS_BUCKET:
@@ -315,12 +426,36 @@ Resources:
               Ref: Api
             Path: /transcribe
             Method: any
+        PersonalLog:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /log
+            Method: get
+            Auth:
+              Authorizer: CognitoAuth
+        Reflect:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /reflect
+            Method: post
+            Auth:
+              Authorizer: CognitoAuth
     Metadata:
       SamResourceId: EmployeeFn
   AdminFn:
     Type: AWS::Serverless::Function
     Properties:
       Handler: admin/handler.handler
+      VpcConfig:
+        SubnetIds:
+        - Ref: DbSubnetA
+        - Ref: DbSubnetB
+        SecurityGroupIds:
+        - Ref: LambdaSecurityGroup
       Environment:
         Variables:
           APP_BASE_URL:
@@ -384,6 +519,12 @@ Resources:
     Properties:
       Handler: scheduler/handler.handler
       CodeUri: SchedulerFn
+      VpcConfig:
+        SubnetIds:
+        - Ref: DbSubnetA
+        - Ref: DbSubnetB
+        SecurityGroupIds:
+        - Ref: LambdaSecurityGroup
       Environment:
         Variables:
           APP_BASE_URL:
@@ -433,6 +574,12 @@ Resources:
       Handler: processing/handler.handler
       CodeUri: ProcessingFn
       Timeout: 60
+      VpcConfig:
+        SubnetIds:
+        - Ref: DbSubnetA
+        - Ref: DbSubnetB
+        SecurityGroupIds:
+        - Ref: LambdaSecurityGroup
       Environment:
         Variables:
           UPLOADS_BUCKET:
