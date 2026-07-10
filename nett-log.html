@@ -37,6 +37,14 @@
   .field{ margin-bottom:14px; }
   a{ color:var(--red-dark); }
   .hidden{ display:none; }
+  .lb-row{ display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--border); font-size:13px; }
+  .lb-row:last-child{ border-bottom:none; }
+  .lb-row.me{ background:#fdf5f5; font-weight:700; border-radius:4px; }
+  .lb-rank{ width:26px; text-align:center; font-size:15px; flex:none; }
+  .lb-name{ flex:1; }
+  .lb-track{ width:90px; height:8px; background:var(--border); border-radius:5px; overflow:hidden; flex:none; }
+  .lb-fill{ display:block; height:100%; background:var(--red); }
+  .lb-pct{ width:42px; text-align:right; font-weight:700; flex:none; }
 </style>
 <header><div class="wrap">
   <div class="brand"><span class="logo">TOWER5</span><span class="sub">Personal Log</span></div>
@@ -59,6 +67,7 @@
 <div class="wrap hidden" id="app-view">
   <div id="head"></div>
   <div id="content"><div class="empty">Loading your log…</div></div>
+  <div id="lb"></div>
 </div>
 
 <script>
@@ -115,6 +124,24 @@ async function load(){
   STATE.reflections=d.reflections||[]; STATE.responses=d.responses||[];
   document.getElementById('head').innerHTML=`<h1>${esc((d.user&&d.user.name)||'Your log')}</h1><div class="who">${esc((d.user&&d.user.email)||'')} · showing the last ${d.windowDays||14} days</div>`;
   render();
+  loadBoard();
+}
+async function loadBoard(){
+  const box=document.getElementById('lb'); if(!box) return;
+  let lb=[]; try{ const r=await api('/leaderboard'); const d=await r.json(); if(!r.ok) return; lb=d.leaderboard||[]; }catch{ return; }
+  const rows=lb.map(m=>({ ...m, rate:m.sent?m.responded/m.sent:0 }))
+    .sort((a,b)=> b.rate-a.rate || b.responded-a.responded || (a.name||'').localeCompare(b.name||''));
+  if(!rows.length){ box.innerHTML=''; return; }
+  const medal=(i)=> i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span class="muted">${i+1}</span>`;
+  box.innerHTML=`<div class="section-title">Team leaderboard</div>
+    <div class="hint">Response rate across your team. ⭐ = on track for presentation / white-paper eligibility (≥75%).</div>
+    <div class="card">${rows.map((r,i)=>{ const pct=Math.round(r.rate*100);
+      return `<div class="lb-row${r.isMe?' me':''}">
+        <span class="lb-rank">${r.responded>0?medal(i):'<span class="muted">—</span>'}</span>
+        <span class="lb-name">${esc(r.name)}${r.isMe?' <span class="muted" style="font-weight:400">(you)</span>':''} ${(r.sent>0&&r.rate>=0.75)?'⭐':''}</span>
+        <span class="lb-track"><span class="lb-fill" style="width:${pct}%"></span></span>
+        <span class="lb-pct">${r.sent>0?pct+'%':'—'}</span>
+      </div>`; }).join('')}</div>`;
 }
 function render(){
   const r=STATE.responses, refl=STATE.reflections;

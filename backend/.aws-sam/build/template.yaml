@@ -444,6 +444,15 @@ Resources:
             Method: post
             Auth:
               Authorizer: CognitoAuth
+        EmployeeLeaderboard:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: Api
+            Path: /leaderboard
+            Method: get
+            Auth:
+              Authorizer: CognitoAuth
     Metadata:
       SamResourceId: EmployeeFn
   AdminFn:
@@ -536,6 +545,9 @@ Resources:
             Ref: NotificationFn
           SCHEDULE_TZ: America/Los_Angeles
           SCHEDULE_INTERVAL_MIN: '15'
+          REFLECTION_ENABLED: 'true'
+          REFLECTION_DAY: mon
+          REFLECTION_TIME: '09:00'
       Policies:
       - Statement:
         - Effect: Allow

@@ -359,6 +359,9 @@ Resources:
         Reflect:
           Type: Api
           Properties: { RestApiId: !Ref Api, Path: /reflect, Method: post, Auth: { Authorizer: CognitoAuth } }
+        EmployeeLeaderboard:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /leaderboard, Method: get, Auth: { Authorizer: CognitoAuth } }
 
   # ── Admin service: API-key protected. Proxy route → in-code resource router ─
   AdminFn:
@@ -416,6 +419,9 @@ Resources:
           NOTIFICATION_FN: !Ref NotificationFn
           SCHEDULE_TZ: America/Los_Angeles        # timezone survey send_time/resend_time are read in
           SCHEDULE_INTERVAL_MIN: "15"             # must match the tick rate below
+          REFLECTION_ENABLED: "true"              # bi-weekly "review your log" reminder
+          REFLECTION_DAY: mon                     # weekday to send (mon..sun)
+          REFLECTION_TIME: "09:00"                # HH:MM in SCHEDULE_TZ
       Policies:
         - Statement:
             - Effect: Allow

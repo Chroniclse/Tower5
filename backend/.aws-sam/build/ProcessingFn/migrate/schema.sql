@@ -413,6 +413,51 @@ CREATE TABLE IF NOT EXISTS role_examples (
 CREATE INDEX IF NOT EXISTS ix_role_examples_role ON role_examples (project_uuid, role_uuid);
 
 -- ============================================================================
+-- Custom survey fields + audience targeting (Option B: normalized answers)
+-- ============================================================================
+-- Per-survey field definitions. A survey with NO rows here uses the classic
+-- single "description" daily-log form (back-compat).
+CREATE TABLE IF NOT EXISTS survey_field (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  survey_uuid  uuid NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  label        text NOT NULL,
+  field_type   text NOT NULL DEFAULT 'text',   -- 'text' | 'textarea' | 'number' | 'select'
+  options      text,                           -- 'select': comma-separated choices
+  position     int  NOT NULL DEFAULT 0,
+  required     boolean NOT NULL DEFAULT false,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_survey_field_survey ON survey_field (survey_uuid);
+
+-- One answer per (submission, field) — normalized so we can query/filter by
+-- field regardless of who answered.
+CREATE TABLE IF NOT EXISTS survey_response_value (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id         uuid NOT NULL REFERENCES tenants(id)      ON DELETE CASCADE,
+  survey_form_uuid  uuid NOT NULL REFERENCES survey_form(id)  ON DELETE CASCADE,
+  survey_field_uuid uuid NOT NULL REFERENCES survey_field(id) ON DELETE CASCADE,
+  value             text,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_srv_form  ON survey_response_value (survey_form_uuid);
+CREATE INDEX IF NOT EXISTS ix_srv_field ON survey_response_value (survey_field_uuid);
+
+-- Optional audience targeting. No rows = the whole project team (back-compat).
+CREATE TABLE IF NOT EXISTS survey_audience (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  survey_uuid  uuid NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  target_type  text NOT NULL,                  -- 'member' | 'role'
+  target_uuid  uuid NOT NULL,                  -- project_user_mapping.id or roles.id
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_survey_audience_survey ON survey_audience (survey_uuid);
+
+-- ============================================================================
 -- Attach updated_at triggers to every table
 -- ============================================================================
 DO $$
@@ -424,7 +469,8 @@ BEGIN
     'users','project_user_mapping','project_user_role_mapping',
     'project_phase_mapping','project_track_mapping',
     'project_priority_juncture_mapping','user_phase_mapping','survey_token',
-    'surveys','survey_form','digital_assets','admin_project_mapping','user_option','role_template','role_examples','personal_reflection'
+    'surveys','survey_form','digital_assets','admin_project_mapping','user_option','role_template','role_examples','personal_reflection',
+    'survey_field','survey_response_value','survey_audience'
   ]
   LOOP
     EXECUTE format(

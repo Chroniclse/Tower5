@@ -59,6 +59,14 @@
   .btn-sm { padding:7px 13px; font-size:11px; }
 
   table { width:100%; border-collapse:collapse; background:var(--surface); }
+  /* Members tables can be wide (roles + assigned + forms + actions) — let them scroll instead of clipping. */
+  #team-list, #proj-members { overflow-x:auto; }
+  #team-list table, #proj-members table { min-width:720px; }
+  #lb-list { overflow-x:auto; } #lb-list table { min-width:720px; }
+  .lb-medal { font-size:16px; text-align:center; }
+  .lb-rate-track { display:inline-block; vertical-align:middle; width:110px; height:9px; background:var(--line2); border-radius:5px; overflow:hidden; }
+  .lb-rate-fill { display:block; height:100%; background:var(--red); }
+  .tier.star { display:inline-block; font-size:10px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; background:#fdf1f0; color:var(--red); border:1px solid var(--red); border-radius:20px; padding:2px 8px; white-space:nowrap; }
   thead tr { background:var(--surface2); }
   th { text-align:left; font-size:11px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--gray); padding:14px 20px; border-bottom:1px solid var(--line); }
   td { padding:16px 20px; font-size:14px; border-bottom:1px solid var(--line2); color:var(--mid); vertical-align:middle; }
@@ -221,12 +229,13 @@
           <div class="field"><label>From</label><input type="date" id="q-from"></div>
           <div class="field"><label>To</label><input type="date" id="q-to"></div>
           <div class="field"><label>Search text</label><input id="q-search" placeholder="in description…" onkeydown="if(event.key==='Enter')runQuery()"></div>
+          <div class="field"><label>Field value</label><input id="q-fieldval" placeholder="in custom-field answers…" onkeydown="if(event.key==='Enter')runQuery()"></div>
         </div>
         <button class="btn btn-primary" onclick="runQuery()">Run query</button>
         <button class="btn btn-ghost btn-sm" onclick="clearQuery()" style="margin-left:8px">Clear</button>
         <span class="muted" id="q-count" style="margin-left:14px"></span>
       </div></div>
-      <div class="card"><table><thead><tr><th>Submitted</th><th>Member</th><th>Project</th><th>Phase</th><th>Track</th><th>Juncture</th><th>Type</th><th>Response</th></tr></thead><tbody id="q-tbody"><tr><td colspan="8" class="empty">Run a query to see results.</td></tr></tbody></table></div>
+      <div class="card"><table><thead><tr><th>Submitted</th><th>Member</th><th>Project</th><th>Phase</th><th>Track</th><th>Juncture</th><th>Type</th><th>Length</th><th>Response</th></tr></thead><tbody id="q-tbody"><tr><td colspan="9" class="empty">Run a query to see results.</td></tr></tbody></table></div>
     </div>
   </div>
 
@@ -281,6 +290,15 @@
     </div>
   </div>
 
+  <!-- LEADERBOARD -->
+  <div class="page" id="page-leaderboard">
+    <div class="page-header"><div><h1>Leaderboard</h1><p>Response rate per member — who's engaging most. ⭐ marks presentation / white-paper eligibility (≥75%).</p></div></div>
+    <div class="page-body">
+      <div class="stat-grid" id="lb-stats" style="grid-template-columns:repeat(4,1fr);max-width:760px"></div>
+      <div class="card"><div id="lb-list"></div></div>
+    </div>
+  </div>
+
   <!-- ROLES (per-role templates) -->
   <div class="page" id="page-roles">
     <div class="page-header"><div><h1>Roles</h1><p>Give each role its default tracks &amp; junctures (granted automatically when you assign a member that role) and a model example shown to employees.</p></div></div>
@@ -325,6 +343,24 @@
   <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-edit-survey')">Cancel</button><button class="btn btn-primary" onclick="saveEditSurvey()">Save</button></div>
 </div></div>
 
+<div class="modal-bd" id="modal-customize-survey"><div class="modal" style="max-width:640px">
+  <h2>Customize survey</h2>
+  <p class="sub" style="margin:-6px 0 16px">Define the questions this survey asks and who receives it.</p>
+  <div class="field"><label>Custom fields <span class="muted">(leave empty to use the default activity-description form)</span></label>
+    <div id="cf-fields"></div>
+    <button class="btn btn-ghost btn-sm" onclick="addFieldRow()">+ Add field</button>
+  </div>
+  <div class="field"><label>Audience</label>
+    <label style="font-weight:400;display:block"><input type="radio" name="cf-aud" value="all" onchange="toggleAudience()"> Whole team</label>
+    <label style="font-weight:400;display:block"><input type="radio" name="cf-aud" value="subset" onchange="toggleAudience()"> Specific members / roles</label>
+    <div id="cf-audience" style="display:none;margin-top:8px">
+      <div class="muted" style="margin:6px 0 4px">Members</div><div id="cf-members" class="pick"></div>
+      <div class="muted" style="margin:10px 0 4px">Roles</div><div id="cf-roles" class="pick"></div>
+    </div>
+  </div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('modal-customize-survey')">Cancel</button><button class="btn btn-primary" onclick="saveCustomize()">Save</button></div>
+</div></div>
+
 <div id="toast"></div>
 
 <script>
@@ -344,8 +380,8 @@ const cache = { projects:[], phases:[], tracks:[], junctures:[], roles:[], surve
 const byId = (a)=>Object.fromEntries(a.map(x=>[x.id,x]));
 
 const SUPER_TABS  = ['projects','catalog','tenants','dashboard','queries'];
-const TENANT_TABS = ['team','roles','surveys','responses','queries'];
-const TAB_LABEL = { projects:'Projects', catalog:'Catalog', tenants:'Tenants', dashboard:'Dashboard', queries:'Queries', team:'Team', roles:'Roles', surveys:'Surveys', responses:'Dashboard' };
+const TENANT_TABS = ['team','roles','surveys','responses','leaderboard','queries'];
+const TAB_LABEL = { projects:'Projects', catalog:'Catalog', tenants:'Tenants', dashboard:'Dashboard', queries:'Queries', team:'Team', roles:'Roles', surveys:'Surveys', responses:'Dashboard', leaderboard:'Leaderboard' };
 
 (function boot(){
   if(!API_BASE||!CLIENT_ID) return showSettings();
@@ -394,6 +430,7 @@ function switchTab(tab){
   if(tab==='dashboard') loadDashboard();
   if(tab==='queries') populateQueryFilters();
   if(tab==='responses') loadResponses();
+  if(tab==='leaderboard') loadLeaderboard();
   if(tab==='roles') loadRoleTemplates();
 }
 
@@ -508,27 +545,32 @@ function barList(arr){ if(!arr||!arr.length) return '<div class="empty">No data.
 let lastQueryRows=[];
 function populateQueryFilters(){ fillProjectDropdowns(); }
 async function runQuery(){
-  const p=new URLSearchParams(); const map={project_id:'q-project',phase:'q-phase',track:'q-track',juncture:'q-juncture',feedback_type:'q-type',member:'q-member',from:'q-from',to:'q-to',q:'q-search'};
+  const p=new URLSearchParams(); const map={project_id:'q-project',phase:'q-phase',track:'q-track',juncture:'q-juncture',feedback_type:'q-type',member:'q-member',from:'q-from',to:'q-to',q:'q-search',field_value:'q-fieldval'};
   for(const [k,id] of Object.entries(map)){ const val=g(id); if(val) p.set(k,val); }
   let d; try{ d=await (await api('/admin/query?'+p.toString())).json(); }catch(e){ return showToast(e.message); }
   lastQueryRows=d.rows||[]; document.getElementById('q-count').textContent=`${lastQueryRows.length} result(s)`;
+  const respText=(r)=> r.field_answers || r.description || '';
   document.getElementById('q-tbody').innerHTML=lastQueryRows.length?lastQueryRows.map(r=>`<tr>
     <td style="white-space:nowrap">${esc((r.submitted_at||'').replace('T',' ').slice(0,16))}</td>
     <td>${esc((((r.fname||'')+' '+(r.lname||'')).trim())||r.email||'—')}</td>
     <td>${esc(r.project_details||'—')}</td><td>${esc(r.phase||'—')}</td><td>${esc(r.track||'—')}</td><td>${esc(r.juncture||'—')}</td>
     <td>${esc(r.feedback_type||'—')}</td>
-    <td>${esc((r.description||'').slice(0,160))}</td></tr>`).join(''):`<tr><td colspan="8" class="empty">No results.</td></tr>`;
+    <td style="white-space:nowrap" title="${respText(r).length} chars">${wordCount(respText(r))} words</td>
+    <td>${esc(respText(r).slice(0,220))}</td></tr>`).join(''):`<tr><td colspan="9" class="empty">No results.</td></tr>`;
 }
+const wordCount=(s)=>{ const t=(s||'').trim(); return t?t.split(/\s+/).length:0; };
 function clearQuery(){
-  ['q-project','q-phase','q-track','q-juncture','q-type','q-member','q-from','q-to','q-search'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  ['q-project','q-phase','q-track','q-juncture','q-type','q-member','q-from','q-to','q-search','q-fieldval'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
   lastQueryRows=[]; document.getElementById('q-count').textContent='';
-  document.getElementById('q-tbody').innerHTML='<tr><td colspan="8" class="empty">Run a query to see results.</td></tr>';
+  document.getElementById('q-tbody').innerHTML='<tr><td colspan="9" class="empty">Run a query to see results.</td></tr>';
 }
 function exportQuery(){
   if(!lastQueryRows.length) return showToast('Run a query first.');
-  const cols=['submitted_at','email','fname','lname','project_details','juncture','phase','track','feedback_type','description'];
+  const cols=['submitted_at','email','fname','lname','project_details','juncture','phase','track','feedback_type','word_count','char_count','description','field_answers'];
   const cell=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`;
-  const csv=[cols.join(',')].concat(lastQueryRows.map(r=>cols.map(c=>cell(r[c])).join(','))).join('\n');
+  const txt=r=> r.field_answers || r.description || '';
+  const val=(r,c)=> c==='word_count'?wordCount(txt(r)) : c==='char_count'?txt(r).length : r[c];
+  const csv=[cols.join(',')].concat(lastQueryRows.map(r=>cols.map(c=>cell(val(r,c))).join(','))).join('\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`tower5-query-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); showToast('Exported.');
 }
 
@@ -574,13 +616,13 @@ function renderSurveys(){
   const sched=(s)=>`${s.send_days?esc(s.send_days):'—'} @ ${s.send_time?esc(String(s.send_time).slice(0,5)):'—'}`;
   document.getElementById('surveys-list').innerHTML=cache.surveys.length?`<table><thead><tr><th>Title</th><th>Schedule</th><th></th></tr></thead><tbody>${
     cache.surveys.map(s=>`<tr><td class="name-cell">${esc(s.title||'(untitled)')}</td><td>${sched(s)}</td>
-      <td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="sendSurvey('${s.id}')">Send now</button> <button class="btn btn-ghost btn-sm" onclick="openEditSurvey('${s.id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmSurvey('${s.id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
+      <td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="sendSurvey('${s.id}')">Send now</button> <button class="btn btn-ghost btn-sm" onclick="openCustomizeSurvey('${s.id}')">Customize</button> <button class="btn btn-ghost btn-sm" onclick="openEditSurvey('${s.id}')">Edit</button> <button class="btn btn-outline btn-sm" onclick="rmSurvey('${s.id}')">Remove</button></td></tr>`).join('')}</tbody></table>`
     :`<div class="empty">No surveys yet.</div>`;
 }
 async function rmSurvey(id){ try{ await del('surveys',id); cache.surveys=cache.surveys.filter(s=>s.id!==id); renderSurveys(); showToast('Survey removed.'); }catch(e){ showToast(e.message); } }
 async function sendSurvey(id){
   const project_uuid=(cache.projects[0]||{}).id; if(!project_uuid) return showToast('No project assigned to you.');
-  if(!confirm('Send this survey link to everyone on the project now?')) return;
+  if(!confirm('Send this survey link now (to its audience — whole team unless you targeted a sub-group)?')) return;
   try{ const r=await create('dispatch',{project_id:project_uuid,audience:'all',channel:'both',survey_id:id}); showToast(`Sent — queued ${r.queued}/${r.recipients} recipient(s).`); }catch(e){ showToast(e.message); }
 }
 
@@ -613,7 +655,76 @@ async function saveEditSurvey(){
     const i=cache.surveys.findIndex(x=>x.id===editingSurvey); if(i>=0) cache.surveys[i]=u; renderSurveys(); closeModal('modal-edit-survey'); showToast('Survey updated.'); }catch(e){ showToast(e.message); }
 }
 
+// ─── TENANT: CUSTOMIZE SURVEY (custom fields + audience) ────────────────────
+let customizingSurvey=null;
+const CF_TYPES=['text','textarea','number','select'];
+function surveyFieldRow(f){ f=f||{};
+  return `<div class="cf-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap">
+    <input class="cf-label" placeholder="Question / label" value="${esc(f.label||'')}" style="flex:2;min-width:150px">
+    <select class="cf-type" onchange="cfTypeChange(this)" style="width:auto">${CF_TYPES.map(t=>`<option ${f.field_type===t?'selected':''}>${t}</option>`).join('')}</select>
+    <input class="cf-options" placeholder="option1, option2" value="${esc(f.options||'')}" style="flex:1;min-width:120px;display:${f.field_type==='select'?'':'none'}">
+    <label style="font-weight:400;font-size:12px;white-space:nowrap"><input type="checkbox" class="cf-req" ${f.required?'checked':''}> req</label>
+    <button class="btn btn-outline btn-sm" onclick="this.closest('.cf-row').remove()">×</button></div>`;
+}
+function addFieldRow(f){ document.getElementById('cf-fields').insertAdjacentHTML('beforeend', surveyFieldRow(f)); }
+function cfTypeChange(sel){ sel.closest('.cf-row').querySelector('.cf-options').style.display = sel.value==='select'?'':'none'; }
+function toggleAudience(){ const sub=(document.querySelector('input[name="cf-aud"]:checked')||{}).value==='subset'; document.getElementById('cf-audience').style.display=sub?'':'none'; }
+async function openCustomizeSurvey(id){
+  customizingSurvey=id; document.getElementById('cf-fields').innerHTML='';
+  let fields=[], aud={members:[],roles:[]};
+  try{ fields=(await(await api('/admin/survey-fields?survey_id='+encodeURIComponent(id))).json()).fields||[]; }catch(e){ return showToast(e.message); }
+  try{ aud=await(await api('/admin/survey-audience?survey_id='+encodeURIComponent(id))).json(); }catch{}
+  fields.forEach(f=>addFieldRow(f));
+  const members=teamCache||[]; const memSet=new Set(aud.members||[]), roleSet=new Set(aud.roles||[]);
+  document.getElementById('cf-members').innerHTML=members.length?members.map(m=>`<label><input type="checkbox" value="${m.pum_id}" ${memSet.has(m.pum_id)?'checked':''}>${esc(((m.fname||'')+' '+(m.lname||'')).trim()||m.email)}</label>`).join(''):'<span class="muted">No members.</span>';
+  document.getElementById('cf-roles').innerHTML=cache.roles.map(r=>`<label><input type="checkbox" value="${r.id}" ${roleSet.has(r.id)?'checked':''}>${esc(r.role_name)}</label>`).join('')||'<span class="muted">No roles.</span>';
+  const isSubset=(aud.members&&aud.members.length)||(aud.roles&&aud.roles.length);
+  const radio=document.querySelector(`input[name="cf-aud"][value="${isSubset?'subset':'all'}"]`); if(radio) radio.checked=true; toggleAudience();
+  openModal('modal-customize-survey');
+}
+async function saveCustomize(){
+  const fields=[...document.querySelectorAll('#cf-fields .cf-row')].map(r=>({
+    label:r.querySelector('.cf-label').value.trim(), field_type:r.querySelector('.cf-type').value,
+    options:r.querySelector('.cf-options').value.trim(), required:r.querySelector('.cf-req').checked,
+  })).filter(f=>f.label);
+  const subset=(document.querySelector('input[name="cf-aud"]:checked')||{}).value==='subset';
+  const members=subset?picked('cf-members'):[]; const roles=subset?picked('cf-roles'):[];
+  try{
+    await api('/admin/survey-fields?survey_id='+encodeURIComponent(customizingSurvey),{method:'PUT',body:JSON.stringify({fields})});
+    await api('/admin/survey-audience?survey_id='+encodeURIComponent(customizingSurvey),{method:'PUT',body:JSON.stringify({members,roles})});
+    closeModal('modal-customize-survey'); showToast('Survey customized.');
+  }catch(e){ showToast(e.message); }
+}
+
 // ─── TENANT: DASHBOARD (per-survey submitted / not) ─────────────────────────
+// ─── LEADERBOARD + gamification ─────────────────────────────────────────────
+async function loadLeaderboard(){
+  let lb=[]; try{ lb=(await (await api('/admin/leaderboard')).json()).leaderboard||[]; }catch(e){ return showToast(e.message); }
+  const rows=lb.map(m=>{ const sent=+m.sent||0, responded=+m.responded||0;
+    return { ...m, sent, responded, sent_today:+m.sent_today||0, responded_today:+m.responded_today||0, rate:sent?responded/sent:0 }; })
+    .sort((a,b)=> b.rate-a.rate || b.responded-a.responded || ((a.fname||'')+(a.lname||'')).localeCompare((b.fname||'')+(b.lname||'')));
+  const totalSent=rows.reduce((s,r)=>s+r.sent,0), totalResp=rows.reduce((s,r)=>s+r.responded,0);
+  const overall=totalSent?Math.round(totalResp/totalSent*100):0;
+  const respondedToday=rows.filter(r=>r.responded_today>0).length;
+  const eligible=rows.filter(r=>r.sent>0 && r.rate>=0.75).length;
+  document.getElementById('lb-stats').innerHTML=[
+    ['Team rate', overall+'%'],['Responded today', respondedToday+'/'+rows.length],
+    ['⭐ Eligible', eligible],['Members', rows.length],
+  ].map(([k,v])=>`<div class="stat-card"><div class="stat-val">${v}</div><div class="stat-key">${k}</div></div>`).join('');
+  const medal=(i)=> i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span class="muted">${i+1}</span>`;
+  document.getElementById('lb-list').innerHTML=rows.length?`<table><thead><tr><th>#</th><th>Member</th><th>Response rate</th><th>Responded / Sent</th><th>Today</th><th>Last response</th><th></th></tr></thead><tbody>${
+    rows.map((r,i)=>{ const pct=Math.round(r.rate*100); const name=((r.fname||'')+' '+(r.lname||'')).trim()||r.email;
+      const star=(r.sent>0 && r.rate>=0.75)?'<span class="tier star">⭐ Presenter</span>':'';
+      return `<tr>
+        <td class="lb-medal">${(r.responded>0)?medal(i):'<span class="muted">—</span>'}</td>
+        <td class="name-cell">${esc(name)}<div class="muted" style="font-weight:400;font-size:11px">${esc(r.email)}</div></td>
+        <td><span class="lb-rate-track"><span class="lb-rate-fill" style="width:${pct}%"></span></span> <span style="font-weight:700">${r.sent>0?pct+'%':'<span class="muted" style="font-weight:400">no sends</span>'}</span></td>
+        <td>${r.responded} / ${r.sent}</td>
+        <td>${r.responded_today>0?'✅':(r.sent_today>0?'<span class="muted">pending</span>':'<span class="muted">—</span>')}</td>
+        <td>${r.last_response?esc(String(r.last_response).replace('T',' ').slice(0,10)):'<span class="muted">never</span>'}</td>
+        <td>${star}</td></tr>`;
+    }).join('')}</tbody></table>`:`<div class="empty">No members yet.</div>`;
+}
 function loadResponses(){
   const sel=document.getElementById('rs-survey');
   sel.innerHTML=cache.surveys.map(s=>`<option value="${s.id}">${esc(s.title||'(untitled)')}</option>`).join('');

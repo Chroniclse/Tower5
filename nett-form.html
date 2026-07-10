@@ -201,6 +201,7 @@ function addActivity() {
       </div>
       <button class="example-toggle" onclick="toggleExample(${n})"><span id="ex-arrow-${n}">▶</span> See example for your role</button>
       <div class="example-block" id="example-${n}">${EXAMPLE ? escapeHtml(EXAMPLE) : 'No example has been set for your role yet.'}</div>
+      ${hasFields() ? fieldsHtml(n) : `
       <label>Activity description</label>
       <textarea class="response-textarea" id="response-${n}" placeholder="Describe what you worked on…"></textarea>
       <div class="prompt-hint">Try to address:
@@ -209,7 +210,7 @@ function addActivity() {
       <div class="recorder">
         <button type="button" class="rec-btn" id="rec-btn-${n}" onclick="toggleRecording(${n})"><span class="rec-dot"></span><span id="rec-label-${n}">Record</span></button>
         <span class="rec-status" id="rec-status-${n}"></span>
-      </div>
+      </div>`}
       <div class="file-row">
         <input type="file" id="file-${n}" multiple style="display:none" onchange="onFileChange(${n})">
         <button type="button" class="file-btn" onclick="document.getElementById('file-${n}').click()">📎 Add files</button>
@@ -227,6 +228,20 @@ function addActivity() {
   if (!isFirst) card.scrollIntoView({ behavior:'smooth', block:'center' });
 }
 function removeActivity(n){ if(recordingN===n) stopRecording(); const c=document.getElementById(`activity-${n}`); if(c) c.remove(); delete fileAssets[n]; delete linkAssets[n]; renumber(); }
+// ── CUSTOM SURVEY FIELDS ─────────────────────────────────────────────────────
+function hasFields(){ return !!(SURVEY.fields && SURVEY.fields.length); }
+function fieldsHtml(n){
+  const box='width:100%;padding:10px;border:1px solid #d5d5d8;border-radius:4px;font-size:14px;font-family:inherit';
+  return SURVEY.fields.map(f=>{
+    const id=`field-${n}-${f.id}`; const req=f.required?' <span style="color:#c0392b">*</span>':'';
+    let input;
+    if(f.field_type==='textarea') input=`<textarea class="response-textarea" id="${id}"></textarea>`;
+    else if(f.field_type==='number') input=`<input type="number" id="${id}" style="${box}">`;
+    else if(f.field_type==='select') input=`<select id="${id}" style="${box}"><option value="">— select —</option>${(f.options||'').split(',').map(o=>o.trim()).filter(Boolean).map(o=>`<option>${escapeHtml(o)}</option>`).join('')}</select>`;
+    else input=`<input type="text" id="${id}" style="${box}">`;
+    return `<label>${escapeHtml(f.label)}${req}</label>${input}`;
+  }).join('');
+}
 // ── LINKS (multiple per activity) ────────────────────────────────────────────
 function addLink(n){
   const inp=document.getElementById(`link-${n}`); if(!inp) return;
@@ -313,14 +328,25 @@ async function submitForm(){
   const cards=document.querySelectorAll('.activity-card'); const reports=[]; let blank=false;
   cards.forEach((card,i)=>{
     const n=card.id.replace('activity-','');
-    const description=(document.getElementById(`response-${n}`)?.value||'').trim();
-    if(!description){ blank=true; showToast(`Please fill in the description for Activity ${i+1}.`); return; }
     const assets=(fileAssets[n]||[]).filter(a=>!a.preview).map(a=>({asset_type:'file',bucket_name:a.bucket_name,file_name:a.file_name}));
     (linkAssets[n]||[]).forEach(u=>assets.push({asset_type:'url',url:u}));
-    reports.push({ description, assets,
+    const common={ assets,
       project_phase_mapping_uuid: document.getElementById(`phase-${n}`)?.value || undefined,
       project_track_mapping_uuid: document.getElementById(`track-${n}`)?.value || undefined,
-      project_priority_juncture_mapping_uuid: document.getElementById(`juncture-${n}`)?.value || undefined });
+      project_priority_juncture_mapping_uuid: document.getElementById(`juncture-${n}`)?.value || undefined };
+    if(hasFields()){
+      const values=[]; let missing=null;
+      for(const f of SURVEY.fields){ const el=document.getElementById(`field-${n}-${f.id}`); const val=(el?el.value:'').trim();
+        if(f.required && !val){ missing=f.label; break; }
+        if(val) values.push({ field_id:f.id, value:val }); }
+      if(missing){ blank=true; showToast(`Please fill in “${missing}” for Activity ${i+1}.`); return; }
+      if(!values.length){ blank=true; showToast(`Please answer at least one field for Activity ${i+1}.`); return; }
+      reports.push({ ...common, values });
+    } else {
+      const description=(document.getElementById(`response-${n}`)?.value||'').trim();
+      if(!description){ blank=true; showToast(`Please fill in the description for Activity ${i+1}.`); return; }
+      reports.push({ ...common, description });
+    }
   });
   if(blank || !reports.length) return;
   const payload={ token:TOKEN, survey_id:SURVEY.survey_id||undefined, reports };

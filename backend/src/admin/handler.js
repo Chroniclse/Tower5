@@ -201,7 +201,7 @@ exports.handler = async (event) => {
       if (allowed !== null && (!body.project_id || !allowed.includes(body.project_id))) {
         return json(403, { error: 'Pick one of your assigned projects to dispatch.' });
       }
-      return json(200, await dispatch({ ...body, tenantId }));
+      return json(200, await dispatch({ ...body, tenantId, surveyId: body.survey_id }));
     }
 
     // ── Export ───────────────────────────────────────────────────────────────
@@ -220,8 +220,15 @@ exports.handler = async (event) => {
     // ── Per-survey submission status (who submitted / who hasn't) ─────────────
     if (resource === 'survey-status' && method === 'GET') return surveyStatus(event, auth, allowed);
 
+    // ── Response-rate leaderboard (per member, ranked) ────────────────────────
+    if (resource === 'leaderboard' && method === 'GET') return leaderboard(event, auth, allowed);
+
     // ── Per-role option templates (tenant) ───────────────────────────────────
     if (resource === 'role-templates') return handleRoleTemplates(event, auth, allowed, method, id);
+
+    // ── Custom survey fields + audience targeting ─────────────────────────────
+    if (resource === 'survey-fields') return handleSurveyFields(event, auth, allowed, method);
+    if (resource === 'survey-audience') return handleSurveyAudience(event, auth, allowed, method);
 
     // ── Generic CRUD ─────────────────────────────────────────────────────────
     const repo = RESOURCES[resource];
@@ -552,6 +559,29 @@ async function handleTeam(event, auth, allowed, method, id) {
   return json(405, { error: 'Method not allowed' });
 }
 
+// ── /admin/leaderboard — response rate per member (issued vs. used tokens),
+//    ranked. "Today" is bucketed in America/Los_Angeles (the scheduler's TZ).
+async function leaderboard(event, auth, allowed) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  const projectId = teamProject(event, auth, allowed);
+  if (!projectId) return json(400, { error: 'No project in scope.' });
+  const members = await rows(
+    `select pum.id as pum_id, u.fname, u.lname, u.email,
+            count(st.id) as sent,
+            count(st.id) filter (where st.used_at is not null) as responded,
+            count(st.id) filter (where (st.created_at at time zone 'America/Los_Angeles')::date = (now() at time zone 'America/Los_Angeles')::date) as sent_today,
+            count(st.id) filter (where st.used_at is not null and (st.used_at at time zone 'America/Los_Angeles')::date = (now() at time zone 'America/Los_Angeles')::date) as responded_today,
+            max(st.used_at) as last_response
+       from project_user_mapping pum
+       join users u on u.id = pum.user_uuid
+       left join survey_token st on st.project_user_mapping_uuid = pum.id
+      where pum.tenant_id = :t::uuid and pum.project_uuid = :p::uuid
+      group by pum.id, u.fname, u.lname, u.email`,
+    { t: tenantId, p: projectId });
+  return json(200, { leaderboard: members });
+}
+
 // ── /admin/survey-status — per-survey: which members submitted, which didn't.
 //    Optional ?date=YYYY-MM-DD scopes "submitted" to one send/day; the response
 //    also lists the distinct dates the survey has received submissions. ───────
@@ -595,6 +625,79 @@ async function handleMemberCredentials(event, auth, allowed) {
     const login = await ensureEmployeeLogin(m.email, tenantId, m.fname, m.lname);
     return json(200, { login });
   } catch (e) { return json(400, { error: e.message }); }
+}
+
+// Confirm a survey exists in the caller's scope; returns its project_uuid or null.
+async function surveyInScope(tenantId, surveyId, allowed) {
+  const s = await one(`select project_uuid from surveys where id = :s::uuid and tenant_id = :t::uuid`, { s: surveyId, t: tenantId });
+  if (!s) return { error: json(404, { error: 'Survey not found.' }) };
+  if (allowed !== null && !allowed.includes(s.project_uuid)) return { error: json(403, { error: 'Survey is outside your scope.' }) };
+  return { projectId: s.project_uuid };
+}
+
+const FIELD_TYPES = ['text', 'textarea', 'number', 'select'];
+
+// ── /admin/survey-fields?survey_id= — define a survey's custom fields ─────────
+async function handleSurveyFields(event, auth, allowed, method) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  const surveyId = (event.queryStringParameters || {}).survey_id;
+  if (!surveyId) return json(400, { error: 'survey_id is required.' });
+  const sc = await surveyInScope(tenantId, surveyId, allowed);
+  if (sc.error) return sc.error;
+
+  if (method === 'GET') {
+    const fields = await rows(`select id, label, field_type, options, position, required from survey_field where survey_uuid = :s::uuid order by position, created_at`, { s: surveyId });
+    return json(200, { fields });
+  }
+  if (method === 'PUT' || method === 'PATCH') {
+    const list = Array.isArray(parseBody(event).fields) ? parseBody(event).fields : [];
+    await transaction(async (qx) => {
+      await qx(`delete from survey_field where survey_uuid = :s::uuid and tenant_id = :t::uuid`, { s: surveyId, t: tenantId });
+      let pos = 0;
+      for (const f of list) {
+        const label = String(f.label || '').trim();
+        if (!label) continue;
+        const type = FIELD_TYPES.includes(f.field_type) ? f.field_type : 'text';
+        await qx(`insert into survey_field (tenant_id, survey_uuid, label, field_type, options, position, required)
+                  values (:t::uuid, :s::uuid, :l, :ft, :o, :p, :req)`,
+          { t: tenantId, s: surveyId, l: label, ft: type, o: (f.options || '').trim() || null, p: pos++, req: !!f.required });
+      }
+    });
+    return json(200, { ok: true });
+  }
+  return json(405, { error: 'Method not allowed' });
+}
+
+// ── /admin/survey-audience?survey_id= — target a survey to a sub-group ────────
+// No rows = whole project team. body: { members: [pum_id], roles: [role_id] }
+async function handleSurveyAudience(event, auth, allowed, method) {
+  const tenantId = tenantOf(event, auth);
+  if (!tenantId) return json(400, { error: 'No tenant on the token.' });
+  const surveyId = (event.queryStringParameters || {}).survey_id;
+  if (!surveyId) return json(400, { error: 'survey_id is required.' });
+  const sc = await surveyInScope(tenantId, surveyId, allowed);
+  if (sc.error) return sc.error;
+
+  if (method === 'GET') {
+    const targets = await rows(`select target_type, target_uuid from survey_audience where survey_uuid = :s::uuid`, { s: surveyId });
+    return json(200, {
+      members: targets.filter((t) => t.target_type === 'member').map((t) => t.target_uuid),
+      roles: targets.filter((t) => t.target_type === 'role').map((t) => t.target_uuid),
+    });
+  }
+  if (method === 'PUT' || method === 'PATCH') {
+    const b = parseBody(event);
+    const members = Array.isArray(b.members) ? b.members : [];
+    const rolez = Array.isArray(b.roles) ? b.roles : [];
+    await transaction(async (qx) => {
+      await qx(`delete from survey_audience where survey_uuid = :s::uuid and tenant_id = :t::uuid`, { s: surveyId, t: tenantId });
+      for (const m of members) await qx(`insert into survey_audience (tenant_id, survey_uuid, target_type, target_uuid) values (:t::uuid,:s::uuid,'member',:x::uuid)`, { t: tenantId, s: surveyId, x: m });
+      for (const r of rolez) await qx(`insert into survey_audience (tenant_id, survey_uuid, target_type, target_uuid) values (:t::uuid,:s::uuid,'role',:x::uuid)`, { t: tenantId, s: surveyId, x: r });
+    });
+    return json(200, { ok: true });
+  }
+  return json(405, { error: 'Method not allowed' });
 }
 
 // ── /admin/role-templates — tenant admin sets per-role default tracks/junctures
@@ -710,12 +813,22 @@ async function queryHandler(event, auth, allowed) {
   if (q.from) { where.push('sf.submitted_at >= :from::timestamptz'); params.from = q.from; }
   if (q.to) { where.push('sf.submitted_at <= :to::timestamptz'); params.to = q.to; }
   if (q.q) { where.push('sf.description ilike :search'); params.search = `%${q.q}%`; }
+  // Filter by a custom-field answer ("find every report about issue X, whoever wrote it").
+  if (q.field_value) {
+    where.push(`exists (select 1 from survey_response_value srv join survey_field sfl on sfl.id = srv.survey_field_uuid
+                         where srv.survey_form_uuid = sf.id and srv.value ilike :fv ${q.field_label ? 'and sfl.label = :fl' : ''})`);
+    params.fv = `%${q.field_value}%`;
+    if (q.field_label) params.fl = q.field_label;
+  }
   const lim = Math.min(Number(q.limit) || 200, 1000);
 
   const out = await rows(
     `select sf.submitted_at, sf.description, s.feedback_type,
             u.email, u.fname, u.lname, p.project_details,
-            jn.juncture_name as juncture, ph.phase_name as phase, tr.track_name as track
+            jn.juncture_name as juncture, ph.phase_name as phase, tr.track_name as track,
+            (select string_agg(sfl.label || ': ' || srv.value, ' | ' order by sfl.position)
+               from survey_response_value srv join survey_field sfl on sfl.id = srv.survey_field_uuid
+              where srv.survey_form_uuid = sf.id) as field_answers
        from survey_form sf
        join surveys s on s.id = sf.survey_uuid
        left join project_user_mapping pum on pum.id = sf.project_user_mapping_uuid

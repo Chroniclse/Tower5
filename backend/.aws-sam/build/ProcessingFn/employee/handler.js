@@ -40,6 +40,7 @@ exports.handler = async (event) => {
       if (method === 'GET') return transcribeResult(event);
     }
     if (method === 'POST' && path.includes('/submit')) return submit(event);
+    if (method === 'GET' && path.includes('/leaderboard')) return employeeLeaderboard(event);
     if (method === 'GET' && path.includes('/log')) return personalLog(event);
     if (method === 'POST' && path.includes('/reflect')) return addReflection(event);
     return json(404, { error: 'Not found' });
@@ -145,13 +146,21 @@ async function cleanupTranscription(ticket, job) {
 
 // Surveys for the project this token belongs to (surveys are project-level).
 async function surveysForProject(projectId) {
-  return rows(
+  const surveys = await rows(
     `select id as survey_id, title, feedback_type
      from surveys
      where project_uuid = :p::uuid
      order by created_at desc`,
     { p: projectId }
   );
+  // Attach each survey's custom fields (empty = classic description form).
+  for (const s of surveys) {
+    s.fields = await rows(
+      `select id, label, field_type, options, position, required
+         from survey_field where survey_uuid = :s::uuid order by position, created_at`,
+      { s: s.survey_id });
+  }
+  return surveys;
 }
 
 // The catalog options available on a project (phases/tracks/priority junctures),
@@ -283,6 +292,32 @@ async function personalLog(event) {
   });
 }
 
+// GET /leaderboard — the signed-in employee's own team leaderboard (their
+// project's members, response rate, ranked). Names only (no coworker emails);
+// the caller's own row is flagged isMe. Scoped to the projects the caller is on.
+async function employeeLeaderboard(event) {
+  const me = await employeeUser(event);
+  if (!me) return json(403, { error: 'No personal log is associated with this account.' });
+  const board = await rows(
+    `select u.id as user_id, u.fname, u.lname,
+            count(st.id) as sent,
+            count(st.id) filter (where st.used_at is not null) as responded,
+            count(st.id) filter (where st.used_at is not null and (st.used_at at time zone 'America/Los_Angeles')::date = (now() at time zone 'America/Los_Angeles')::date) as responded_today
+       from project_user_mapping pum
+       join users u on u.id = pum.user_uuid
+       left join survey_token st on st.project_user_mapping_uuid = pum.id
+      where pum.tenant_id = :t::uuid
+        and pum.project_uuid in (select project_uuid from project_user_mapping where user_uuid = :me::uuid and tenant_id = :t::uuid)
+      group by u.id, u.fname, u.lname`,
+    { t: me.tenantId, me: me.id });
+  const list = board.map((m) => ({
+    name: `${m.fname || ''} ${m.lname || ''}`.trim() || 'Member',
+    sent: Number(m.sent) || 0, responded: Number(m.responded) || 0, responded_today: Number(m.responded_today) || 0,
+    isMe: m.user_id === me.id,
+  }));
+  return json(200, { leaderboard: list });
+}
+
 // POST /reflect { body } — append a reflection to the signed-in person's log.
 async function addReflection(event) {
   const me = await employeeUser(event);
@@ -313,10 +348,11 @@ async function submit(event) {
       phase: r.project_phase_mapping_uuid || null,
       track: r.project_track_mapping_uuid || null,
       juncture: r.project_priority_juncture_mapping_uuid || null,
+      values: Array.isArray(r.values) ? r.values.filter((v) => v && v.field_id) : [], // custom-field answers
     }))
-    .filter((r) => r.description);
+    .filter((r) => r.description || r.values.some((v) => String(v.value == null ? '' : v.value).trim()));
   if (!reports.length) {
-    return json(400, { error: 'At least one activity report with a description is required.' });
+    return json(400, { error: 'At least one report with a description or field answer is required.' });
   }
 
   // Resolve which survey these reports belong to: the one passed, else latest.
@@ -355,9 +391,17 @@ async function submit(event) {
          returning id`,
         {
           tenant_id: tok.tenant_id, survey: survey.survey_id, pum: tok.project_user_mapping_id,
-          phase: r.phase, track: r.track, juncture: r.juncture, description: r.description,
+          phase: r.phase, track: r.track, juncture: r.juncture, description: r.description || null,
         }
       );
+      for (const v of r.values) {
+        const val = String(v.value == null ? '' : v.value).trim();
+        if (!val) continue;
+        await q(
+          `insert into survey_response_value (tenant_id, survey_form_uuid, survey_field_uuid, value)
+           values (:t::uuid, :f::uuid, :fld::uuid, :v)`,
+          { t: tok.tenant_id, f: form.id, fld: v.field_id, v: val });
+      }
       for (const a of r.assets) {
         const [row] = await q(
           `insert into digital_assets
